@@ -22,7 +22,7 @@ export class Application {
       autoDensity: true,
     });
 
-    // this.app.ticker.maxFPS = config.maxFPS; // Hostile Audit: Removed to verify throttling issue
+
 
     container.appendChild(this.app.canvas);
 

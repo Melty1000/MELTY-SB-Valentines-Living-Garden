@@ -1,9 +1,8 @@
-import { Container, Sprite, Graphics } from 'pixi.js'; // Added Graphics back
+import { Container, Sprite, Graphics } from 'pixi.js';
 import { Flower, FlowerStage } from './Flower';
 import { GlowingHeart } from './GlowingHeart';
 import { Vine } from '../Vine';
-// @ts-ignore
-import { StrandPoint, AttachmentPoint } from '../vine/VineTypes';
+import { AttachmentPoint } from '../vine/VineTypes';
 import { FlowerCache, CacheType } from './FlowerCache';
 import { EventBus, GardenEvents } from '../../core/EventBus';
 import { userIdToColor, parseTwitchColor } from '../../utils/colors';
@@ -153,7 +152,7 @@ export class FlowerManager extends Container {
       },
       color,
       seed
-    ) as any;
+    );
 
     // Ensure these are assigned!
     flower.attachT = point.t;
@@ -401,10 +400,10 @@ export class FlowerManager extends Container {
     const flower = this.flowers.get(userId);
     if (flower) {
       // Remove from occupancy list
-      this.occupiedPoints = this.occupiedPoints.filter(p => p.t !== (flower as any).attachT || p.strandIdx !== (flower as any).strandIdx);
+      this.occupiedPoints = this.occupiedPoints.filter(p => p.t !== flower.attachT || p.strandIdx !== flower.strandIdx);
 
       const pts = this.vine.getAttachmentPoints();
-      const pt = pts.find(p => p.t === (flower as any).attachT && p.strandIdx === (flower as any).strandIdx);
+      const pt = pts.find(p => p.t === flower.attachT && p.strandIdx === flower.strandIdx);
       if (pt) pt.occupied = false;
 
       // Clean up sprites
@@ -454,9 +453,9 @@ export class FlowerManager extends Container {
     const flowers = Array.from(this.flowers.entries()).map(([userId, f]) => ({
       userId,
       data: f.data,
-      attachT: (f as any).attachT,
-      strandIdx: (f as any).strandIdx,
-      stage: f.stage
+      attachT: f.attachT,
+      strandIdx: f.strandIdx
+      // Stage is intentionally NOT saved to force recalculation from messageCount
     }));
 
     const hearts = Array.from(this.hearts.entries()).map(([userId, h]) => ({

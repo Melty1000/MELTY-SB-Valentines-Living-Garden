@@ -100,7 +100,7 @@ export function userIdToColor(userId: string): number {
  */
 export function parseTwitchColor(colorStr?: string): number | null {
   if (!colorStr) return null;
-  // Deep Persistence Fix: Support both prefixed and non-prefixed hex strings
+  // Handle prefixed Twitch colors (e.g. #FF0000 vs FF0000)
   const str = colorStr.startsWith('#') ? colorStr.substring(1) : colorStr;
   if (str.length !== 6) return null;
   const val = parseInt(str, 16);

@@ -109,7 +109,7 @@ export class Vine extends Container {
     // We return the pool directly. Consumers must NOT store references to the arrays,
     // or they must copy them if they need persistence (which they don't).
     const pts = this.simulator.vinePoints;
-    const amplitude = (config.vine as any).helixAmplitude || 12;  // Independent strand separation
+    const amplitude = config.vine.helixAmplitude || 12;  // Independent strand separation
 
     // Reuse these to avoid allocation inside the loop? 
     // Actually map() creates new objects. Let's optimize normals too?
@@ -236,7 +236,7 @@ export class Vine extends Container {
     }
 
     const p = pts[idx];
-    const amplitude = (config.vine as any).helixAmplitude ?? 12; // Fix: Allow 0
+    const amplitude = config.vine.helixAmplitude ?? 12; // Fix: Allow 0
 
     // Reuse pre-calculated normal
     const n = { dx: p.nx, dy: p.ny };
@@ -269,7 +269,7 @@ export class Vine extends Container {
     const swayFreq = 0.1;  // ~0.1 rad/s = ~60 second cycle (extremely gentle)
     const timeAngle = time * swayFreq + p.len * 0.05;
     // Fix: Use config.vine.swayAmount instead of hardcoded 4, allow 0
-    const swayAmt = (config.vine.swayAmount ?? 4) * taper;
+    const swayAmt = (config.vine.swayAmount ?? 0) * taper;
 
     // THE KEY: s=0 uses +sin, s=1 uses -sin (OPPOSITE direction)
     const directionMultiplier = strandIdx === 0 ? 1 : -1;

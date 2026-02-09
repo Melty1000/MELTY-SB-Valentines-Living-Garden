@@ -52,6 +52,9 @@ export class Flower {
   public y: number = 0;
   public rotation: number = 0;
 
+  // Placement properties (formerly monkey-patched)
+  public attachT: number = 0;
+  public strandIdx: number = 0;
   public data: FlowerData;
   public size: number;
 

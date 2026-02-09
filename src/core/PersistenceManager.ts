@@ -3,7 +3,6 @@ export interface PersistentEntity {
     data: any;
     attachT: number;
     strandIdx: number;
-    stage?: number;
 }
 
 export interface GardenState {

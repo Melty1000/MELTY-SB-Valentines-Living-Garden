@@ -119,23 +119,8 @@ export class VineRenderer {
         this.renderTwigs(state, totalLength);
     }
 
-    private updateStrandMeshes(state: RenderState): void {
-        // DEBUG: Log every second using window global
-        const now = Date.now();
-        const w = window as any;
-        if (!w._vineDebugLog || now - w._vineDebugLog > 1000) {
-            w._vineDebugLog = now;
-            const mid = Math.floor(state.strands[0].length / 2);
-            const s0 = state.strands[0][mid];
-            const s1 = state.strands[1][mid];
-            if (s0 && s1) {
-                console.log(`[DEBUG] growth=${state.growth.toFixed(2)} MidIdx=${mid} S0=(${s0.x?.toFixed(1)}, ${s0.y?.toFixed(1)}) S1=(${s1.x?.toFixed(1)}, ${s1.y?.toFixed(1)}) Diff=(${(s1.x - s0.x).toFixed(1)}, ${(s1.y - s0.y).toFixed(1)})`);
-            } else {
-                console.log(`[DEBUG] s0=${!!s0}, s1=${!!s1}, strands[0].len=${state.strands[0].length}, strands[1].len=${state.strands[1].length}`);
-            }
-        }
 
-        // Pass full strand arrays — mesh handles culled points (t === -1) internally
+    private updateStrandMeshes(state: RenderState): void {
         this.backStrandMesh.updatePositions(state.strands[0], state.growth);
         this.frontStrandMesh.updatePositions(state.strands[1], state.growth);
     }
