@@ -161,7 +161,7 @@ export class FlowerManager extends Container {
 
     // If stage was provided (restoration), don't let updateFromMessageCount overwrite it
     if (stage !== undefined) {
-      flower.data.messageCount = data.messageCount;
+      // flower.data.messageCount = data.messageCount; // REMOVED: Redundant and dangerous (overwrites default '1' with undefined)
       flower.setImmediateStage(stage);
     } else {
       flower.updateFromMessageCount(data.messageCount, data.milestones || config.milestones, true);
