@@ -59,7 +59,7 @@ export class Flower {
     this.data = data;
     this.color = color;
     this.seed = seed;
-    // Deep Persistence Fix: Store with '#' prefix for standard Twitch parsing
+    // Ensure color is formatted correctly for Twitch parsing
     // Only overwrite if it's not already set correctly to avoid mutation issues
     if (!this.data.color || !this.data.color.startsWith('#')) {
       this.data.color = `#${color.toString(16).padStart(6, '0')}`;

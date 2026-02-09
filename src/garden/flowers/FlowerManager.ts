@@ -134,7 +134,7 @@ export class FlowerManager extends Container {
     EventBus.emit(GardenEvents.VINE_GROWTH, growthTarget);
   }
 
-  private spawnFlower(data: ChatterEventData, forcedPoint?: { t: number, strandIdx: number }, stage?: FlowerStage): Flower | null {
+  private spawnFlower(data: ChatterEventData, forcedPoint?: { t: number, strandIdx: number }): Flower | null {
     // preferredSlotType: 0 for Flower
     const point = forcedPoint ? { ...forcedPoint, occupied: true, slotIdx: -1 } : this.vine.getAvailableAttachmentPoint(this.occupiedPoints, 0);
     if (!point) return null;
@@ -155,17 +155,12 @@ export class FlowerManager extends Container {
       seed
     ) as any;
 
-    // Fix: Ensure these are assigned!
+    // Ensure these are assigned!
     flower.attachT = point.t;
     flower.strandIdx = point.strandIdx;
 
-    // If stage was provided (restoration), don't let updateFromMessageCount overwrite it
-    if (stage !== undefined) {
-      // flower.data.messageCount = data.messageCount; // REMOVED: Redundant and dangerous (overwrites default '1' with undefined)
-      flower.setImmediateStage(stage);
-    } else {
-      flower.updateFromMessageCount(data.messageCount, data.milestones || config.milestones, true);
-    }
+    // Always calculate stage from message count (ensures consistency with persistence)
+    flower.updateFromMessageCount(data.messageCount, data.milestones || config.milestones, true);
 
     // Create render state for this flower
     const mainSprite = new Sprite();
@@ -489,9 +484,8 @@ export class FlowerManager extends Container {
           forcedPoint = { t: f.attachT, strandIdx: f.strandIdx };
         }
 
-        // Fix: Ignore saved 'stage' which might be stale/corrupted. 
-        // Force recalculation from the now-reliable messageCount.
-        const flower = this.spawnFlower(f.data, forcedPoint, undefined);
+        // Recalculate from messageCount to ensure visual state matches data
+        const flower = this.spawnFlower(f.data, forcedPoint);
         if (!flower) console.warn(`[FlowerManager] Failed to restore flower ${f.userId}`);
       });
     }
