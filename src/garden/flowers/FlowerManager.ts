@@ -155,6 +155,10 @@ export class FlowerManager extends Container {
       seed
     ) as any;
 
+    // Fix: Ensure these are assigned!
+    flower.attachT = point.t;
+    flower.strandIdx = point.strandIdx;
+
     // If stage was provided (restoration), don't let updateFromMessageCount overwrite it
     if (stage !== undefined) {
       flower.data.messageCount = data.messageCount;
