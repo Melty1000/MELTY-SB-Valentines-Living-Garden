@@ -293,7 +293,21 @@ export class FlowerManager extends Container {
     const flowers = Array.from(this.flowers.values());
     flowers.forEach(flower => {
       flower.setImmediateStage(stage);
+
+      // Update message count to match the stage so it persists
+      let requiredMessages = 1;
+      switch (stage) {
+        case FlowerStage.Bud: requiredMessages = config.milestones.bud; break;
+        case FlowerStage.Blooming: requiredMessages = config.milestones.bloom; break;
+        case FlowerStage.FullBloom: requiredMessages = config.milestones.full; break;
+        case FlowerStage.MegaBloom: requiredMessages = config.milestones.mega || 50; break;
+        case FlowerStage.Radiant: requiredMessages = config.milestones.radiant || 100; break;
+      }
+      // Only bump it up, don't downgrade if they have more? 
+      // Actually, if we force a lower stage, we should probably lower the count too for consistency.
+      flower.data.messageCount = requiredMessages;
     });
+    this.saveState();
   }
 
   public update(deltaTime: number, windOffset: number = 0): void {
