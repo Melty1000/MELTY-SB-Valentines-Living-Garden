@@ -148,7 +148,7 @@ export class FlowerManager extends Container {
         userId: data.userId,
         userName: data.userName,
         displayName: data.displayName,
-        messageCount: data.messageCount,
+        messageCount: data.messageCount || 1,
         color: data.color,
       },
       color,
