@@ -67,7 +67,8 @@ export class Garden extends Container {
     });
 
     EventBus.on(GardenEvents.STREAM_OFFLINE, () => {
-      PersistenceManager.clear();
+      console.log('[Garden] Stream offline event received. Persisting state.');
+      // PersistenceManager.clear(); // DISABLED: Keep garden alive even if stream is offline
     });
   }
 
