@@ -489,7 +489,9 @@ export class FlowerManager extends Container {
           forcedPoint = { t: f.attachT, strandIdx: f.strandIdx };
         }
 
-        const flower = this.spawnFlower(f.data, forcedPoint, f.stage);
+        // Fix: Ignore saved 'stage' which might be stale/corrupted. 
+        // Force recalculation from the now-reliable messageCount.
+        const flower = this.spawnFlower(f.data, forcedPoint, undefined);
         if (!flower) console.warn(`[FlowerManager] Failed to restore flower ${f.userId}`);
       });
     }
