@@ -1,0 +1,495 @@
+import { Graphics, Renderer, Texture } from 'pixi.js';
+import { darken, lighten, lerpColor } from './colors.js';
+import { VineColors, FlowerColors } from './colors.js';
+
+export function generateFlowerShape(color, size, seed = Math.random() * 10000) {
+  // Use seed only for petal count variation (subtle, keeps some personality)
+  const s1 = (seed * 16807) % 2147483647;
+  const r1 = (s1 / 2147483647); // 0..1
+
+  return {
+    petalCount: Math.floor(5 + r1 * 4), // 5-8 petals (subtle variation)
+    petalLength: size * 0.75, // Fixed proportion
+    petalWidth: size * 0.32, // Fixed proportion
+    centerSize: size * 0.27, // Fixed proportion
+    color,
+    centerColor: darken(color, 0.3),
+  };
+}
+
+/**
+ * Draw a high-fidelity rose using broad, overlapping arcs with depth shading.
+ */
+export function drawRose(
+  graphics,
+  x,
+  y,
+  size,
+  baseColor = FlowerColors.rose,
+  openness = 1
+) {
+  const scaledSize = size * (0.4 + openness * 0.6);
+
+  // 1. BACKGROUND FILL to eliminate any gaps
+  graphics.beginPath();
+  graphics.circle(x, y, scaledSize * 0.8 * openness);
+  graphics.fill({ color: darken(baseColor, 0.4) }); // Softly darkened base occlusion
+
+  // 2. LAYERED PETALS with heavy overlap and shading
+  const layers = [
+    { count, radius: 0.85, rot, scale: 1.25 },   // Outer
+    { count, radius: 0.6, rot: 0.5, scale: 1.0 },     // Middle 1
+    { count, radius: 0.4, rot: 1.1, scale: 0.8 },    // Middle 2
+    { count, radius: 0.25, rot: 0.8, scale: 0.6 },   // Inner
+  ];
+
+  // Draw layers from outside in
+  for (let l = 0; l < layers.length; l++) {
+    const layer = layers[l];
+
+    // Visibility based on openness
+    if (openness < 0.2 && l < 3) continue;
+    if (openness < 0.4 && l < 2) continue;
+    if (openness < 0.6 && l < 1) continue;
+
+    // REFINED INVERTED RAMP: Slightly less dark outer
+    const t = l / (layers.length - 1);
+    const layerColor = lerpColor(darken(baseColor, 0.3), baseColor, t);
+
+    for (let i = 0; i < layer.count; i++) {
+      const angle = (i / layer.count) * Math.PI * 2 + layer.rot;
+      const dist = scaledSize * layer.radius * 0.5 * openness;
+      const pSize = scaledSize * 0.65 * layer.scale;
+
+      drawShadedPetal(graphics, x, y, angle, dist, pSize, layerColor);
+    }
+  }
+
+  // 3. TIGHT ORGANIC SPIRAL CORE (use actual flower color, not hardcoded red)
+  drawShadedSpiralBud(graphics, x, y, scaledSize * 0.4, baseColor, openness);
+}
+
+/**
+ * Draws a broad overlapping petal with procedural shading for depth.
+ */
+function drawShadedPetal(
+  graphics,
+  x,
+  y,
+  angle,
+  dist,
+  size,
+  color
+) {
+  const px = x + Math.cos(angle) * dist;
+  const py = y + Math.sin(angle) * dist;
+
+  const w = size * 2.0;
+  const h = size * 1.3;
+
+  const perpAngle = angle + Math.PI / 2;
+  const tipX = px + Math.cos(angle) * h;
+  const tipY = py + Math.sin(angle) * h;
+
+  const leftX = px + Math.cos(perpAngle) * w * 0.5;
+  const leftY = py + Math.sin(perpAngle) * w * 0.5;
+  const rightX = px - Math.cos(perpAngle) * w * 0.5;
+  const rightY = py - Math.sin(perpAngle) * w * 0.5;
+
+  // Bezier coordinates for reuse
+  const cp1Lx = leftX + Math.cos(angle) * h * 0.3;
+  const cp1Ly = leftY + Math.sin(angle) * h * 0.3;
+  const cp2Lx = leftX + Math.cos(angle) * h * 1.1;
+  const cp2Ly = leftY + Math.sin(angle) * h * 1.1;
+
+  const cp1Rx = rightX + Math.cos(angle) * h * 1.1;
+  const cp1Ry = rightY + Math.sin(angle) * h * 1.1;
+  const cp2Rx = rightX + Math.cos(angle) * h * 0.3;
+  const cp2Ry = rightY + Math.sin(angle) * h * 0.3;
+
+  // PETAL FILL
+  graphics.beginPath();
+  graphics.moveTo(px, py);
+  graphics.bezierCurveTo(cp1Lx, cp1Ly, cp2Lx, cp2Ly, tipX, tipY);
+  graphics.bezierCurveTo(cp1Rx, cp1Ry, cp2Rx, cp2Ry, px, py);
+  graphics.fill({ color });
+
+  // SHADING: Inner shadow (occlusion)
+  graphics.beginPath();
+  graphics.moveTo(px, py);
+  graphics.bezierCurveTo(
+    leftX + Math.cos(angle) * h * 0.2, leftY + Math.sin(angle) * h * 0.2,
+    rightX + Math.cos(angle) * h * 0.2, rightY + Math.sin(angle) * h * 0.2,
+    px, py
+  );
+  graphics.fill({ color, alpha: 0.25 });
+
+  // BEZIER HIGHLIGHT, follows actual petal shape
+  graphics.beginPath();
+  graphics.moveTo(leftX + (tipX - leftX) * 0.3, leftY + (tipY - leftY) * 0.3);
+  graphics.bezierCurveTo(cp2Lx, cp2Ly, tipX, tipY, tipX, tipY);
+  graphics.bezierCurveTo(cp1Rx, cp1Ry, cp2Rx, cp2Ry, rightX + (tipX - rightX) * 0.3, rightY + (tipY - rightY) * 0.3);
+  graphics.stroke({ width: 0.8, color: lerpColor(color, 0xffffff, 0.4), alpha: 0.25 });
+}
+
+/**
+ * Draws a shaded wrapped bud.
+ */
+function drawShadedSpiralBud(
+  graphics,
+  x,
+  y,
+  size,
+  color,
+  openness
+) {
+  const steps = 12;
+  const centerColor = lighten(color, 0.2); // Absolute glowing core peak brightness
+
+  for (let i = steps; i >= 0; i--) {
+    const t = i / steps;
+    const angle = t * Math.PI * 6 + openness * 0.4;
+    // Spiral starts closer to center and wraps around it
+    const dist = t * size * 0.35;
+    const pSize = size * (0.2 + (1 - t) * 0.6);
+
+    const px = x + Math.cos(angle) * dist;
+    const py = y + Math.sin(angle) * dist;
+
+    graphics.beginPath();
+    graphics.ellipse(px, py, pSize, pSize * 0.55);
+    graphics.fill({
+      color: i % 2 === 0 ? lerpColor(centerColor, color, t) : darken(lerpColor(centerColor, color, t), 0.1),
+      alpha: 1
+    });
+    // Inner rim
+    graphics.stroke({ width: 0.5, color, alpha: 0.2 });
+  }
+}
+
+export function drawBud(
+  graphics,
+  x,
+  y,
+  size,
+  color
+) {
+  graphics.beginPath();
+  drawRose(graphics, x, y, size, color, 0.2);
+}
+
+export function drawSeed(
+  graphics,
+  x,
+  y,
+  size,
+  color
+) {
+  graphics.beginPath();
+  graphics.circle(x, y, size * 0.5);
+  graphics.fill({ color: darken(color, 0.3) });
+}
+
+export function drawLeaf(
+  graphics,
+  x,
+  y,
+  size,
+  angle,
+  color = VineColors.leaf
+) {
+  const width = size * 0.45;
+  const perpAngle = angle + Math.PI / 2;
+  const tipX = x + Math.cos(angle) * size;
+  const tipY = y + Math.sin(angle) * size;
+
+  // 1. GENERATE ORGANIC EDGE PATH (with wiggle)
+  // We use stable t-values to ensure no flickering
+  const edgePtsL: { x; y: number }[] = [];
+  const edgePtsR: { x; y: number }[] = [];
+  const edgeSegments = 12;
+
+  for (let i = 0; i <= edgeSegments; i++) {
+    const t = i / edgeSegments;
+    const coreX = x + (tipX - x) * t;
+    const coreY = y + (tipY - y) * t;
+
+    // Parabolic width profile
+    const baseWidth = Math.sin(t * Math.PI) * width;
+
+    // Organic wiggle (serration/waviness) - stable based on t
+    const wiggle = Math.sin(t * Math.PI * 4) * (width * 0.12);
+    const finalWidth = baseWidth + wiggle;
+
+    edgePtsL.push({
+      x: coreX + Math.cos(perpAngle) * finalWidth,
+      y: coreY + Math.sin(perpAngle) * finalWidth
+    });
+    edgePtsR.push({
+      x: coreX - Math.cos(perpAngle) * finalWidth,
+      y: coreY - Math.sin(perpAngle) * finalWidth
+    });
+  }
+
+  // 2. DRAW SHADOW LAYER (Occlusion)
+  graphics.beginPath();
+  graphics.moveTo(x, y);
+  for (const p of edgePtsL) graphics.lineTo(p.x, p.y);
+  for (let i = edgePtsR.length - 1; i >= 0; i--) graphics.lineTo(edgePtsR[i].x, edgePtsR[i].y);
+  graphics.closePath();
+  graphics.fill({ color: darken(color, 0.4), alpha: 0.3 });
+
+  // 3. DRAW MAIN BODY
+  graphics.beginPath();
+  graphics.moveTo(x, y);
+  for (const p of edgePtsL) graphics.lineTo(p.x, p.y);
+  for (let i = edgePtsR.length - 1; i >= 0; i--) graphics.lineTo(edgePtsR[i].x, edgePtsR[i].y);
+  graphics.closePath();
+  graphics.fill({ color });
+
+  // 4. DRAW MIDTONE GRADIENT (Leaf Fold)
+  graphics.beginPath();
+  graphics.moveTo(x, y);
+  for (const p of edgePtsL) graphics.lineTo(p.x, p.y);
+  graphics.lineTo(tipX, tipY);
+  graphics.closePath();
+  graphics.fill({ color: darken(color, 0.15), alpha: 0.4 });
+
+  // 5. DRAW INTRICATE VENATION
+  graphics.beginPath();
+  // Main stem (Midrib)
+  graphics.moveTo(x, y);
+  graphics.lineTo(tipX, tipY);
+
+  // Secondary veins
+  const veinCount = 5;
+  for (let i = 1; i < veinCount; i++) {
+    const t = i / veinCount;
+    const vStartX = x + (tipX - x) * t;
+    const vStartY = y + (tipY - y) * t;
+
+    const vIdx = Math.floor(t * edgeSegments);
+    const targetL = edgePtsL[vIdx];
+    const targetR = edgePtsR[vIdx];
+
+    // Branching veins with curve
+    graphics.moveTo(vStartX, vStartY);
+    graphics.quadraticCurveTo(
+      vStartX + Math.cos(perpAngle) * width * 0.3, vStartY + Math.sin(perpAngle) * width * 0.3,
+      targetL.x, targetL.y
+    );
+    graphics.moveTo(vStartX, vStartY);
+    graphics.quadraticCurveTo(
+      vStartX - Math.cos(perpAngle) * width * 0.3, vStartY - Math.sin(perpAngle) * width * 0.3,
+      targetR.x, targetR.y
+    );
+  }
+  graphics.stroke({ width: 0.8, color: darken(color, 0.35), alpha: 0.7, cap: 'round' });
+
+  // 6. WAXY HIGHLIGHT (Central shine)
+  graphics.beginPath();
+  graphics.moveTo(x + (tipX - x) * 0.1, y + (tipY - y) * 0.1);
+  graphics.lineTo(x + (tipX - x) * 0.6, y + (tipY - y) * 0.6);
+  graphics.stroke({ width: 1.2, color: lighten(color, 0.4), alpha: 0.25, cap: 'round' });
+}
+
+/**
+ * Draws a sharp, procedural thorn along the vine.
+ */
+export function drawThorn(
+  graphics,
+  x,
+  y,
+  size,
+  angle,
+  color = VineColors.main
+) {
+  const h = size * 2.0;
+  const w = size * 1.1;
+
+  const tipX = x + Math.cos(angle) * h;
+  const tipY = y + Math.sin(angle) * h;
+  const perp = angle + Math.PI / 2;
+
+  const base1X = x + Math.cos(perp) * w * 0.45;
+  const base1Y = y + Math.sin(perp) * w * 0.45;
+  const base2X = x - Math.cos(perp) * w * 0.45;
+  const base2Y = y - Math.sin(perp) * w * 0.45;
+
+  graphics.beginPath();
+  graphics.moveTo(base1X, base1Y);
+  // Sharporganic curve
+  graphics.quadraticCurveTo(x + Math.cos(angle) * h * 0.1, y + Math.sin(angle) * h * 0.1, tipX, tipY);
+  graphics.quadraticCurveTo(x + Math.cos(angle) * h * 0.1, y + Math.sin(angle) * h * 0.1, base2X, base2Y);
+  graphics.closePath();
+
+  graphics.fill({ color: darken(color, 0.2) });
+  graphics.stroke({ width: 1.5, color: VineColors.dark, alpha: 1.0 });
+}
+
+export function drawTendril(
+  graphics,
+  x,
+  y,
+  length,
+  angle,
+  curls = 2,
+  curlSign = 1
+) {
+  const segments = 50;
+  const baseWidth = 1.6;
+
+  // 1. Pre-calculate the Pigtail Path
+  const pts: { x; y; t: number }[] = [];
+  for (let i = 0; i <= segments; i++) {
+    const t = i / segments;
+    // Organic spiral math: radius swells slightly then dampens towards the tip
+    const spiralRadius = length * 0.28 * Math.sin(t * Math.PI * 0.8);
+    const spiralAngle = angle + t * Math.PI * (curls * 1.5) * curlSign;
+
+    // Main progression along the natural growth vector
+    const mainDist = length * t;
+
+    pts.push({
+      x: x + Math.cos(angle) * mainDist * 0.75 + Math.cos(spiralAngle) * spiralRadius,
+      y: y + Math.sin(angle) * mainDist * 0.75 + Math.sin(spiralAngle) * spiralRadius,
+      t
+    });
+  }
+
+  // 2. Draw Soft Occlusion Shadow (one continuous stroke for performance)
+  graphics.beginPath();
+  graphics.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) {
+    graphics.lineTo(pts[i].x, pts[i].y);
+  }
+  graphics.stroke({ width: baseWidth + 1.5, color: VineColors.dark, alpha: 0.2, cap: 'round', join: 'round' });
+
+  // 3. Draw Tapered Main Core (Segmented for width control)
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+
+    // Exponential tapering for sharp, elegant tips
+    const thickness = baseWidth * Math.pow(1 - p1.t, 1.1);
+    const color = lerpColor(VineColors.leaf, VineColors.main, p1.t * 0.5);
+
+    graphics.beginPath();
+    graphics.moveTo(p1.x, p1.y);
+    graphics.lineTo(p2.x, p2.y);
+    graphics.stroke({ width: Math.max(0.3, thickness), color, cap: 'round', join: 'round' });
+  }
+}
+
+/**
+ * Bakes a tendril to a RenderTexture for caching.
+ * Draws the tendril once at origin (0,0) facing right (angle=0).
+ * Caller should apply rotation and position via sprite transforms.
+ */
+export function bakeTendrilTexture(
+  renderer,
+  length,
+  curls = 2,
+  curlSign = 1
+) {
+  const tempGraphics = new Graphics();
+
+  // Calculate bounds for the tendril
+  const padding = length * 0.5;
+  const size = length + padding * 2;
+
+  // Draw at center of texture, facing right (angle = 0)
+  drawTendril(tempGraphics, padding, size / 2, length, 0, curls, curlSign);
+
+  const texture = renderer.generateTexture({
+    target,
+    resolution,
+  });
+
+  tempGraphics.destroy();
+  return texture;
+}
+
+export function drawPetal(
+  graphics,
+  x,
+  y,
+  size,
+  color
+) {
+  const w = size * 1.5;
+  const h = size * 1.0;
+  graphics.beginPath();
+  graphics.ellipse(x, y, w * 0.5, h * 0.5);
+  graphics.fill({ color });
+  graphics.stroke({ width: 0.5, color: darken(color, 0.2), alpha: 0.5 });
+}
+
+export function drawFlowerShadow(
+  graphics,
+  x,
+  y,
+  size,
+  alphaMultiplier = 1
+) {
+  const shadowColor = 0x000000;
+  const layers = 8; // Soft layering
+
+  for (let i = 0; i < layers; i++) {
+    const t = i / (layers - 1);
+    // Tighter spread: max 1.2x size for clean garden density
+    const layerSize = size * (0.85 + t * 0.35);
+
+    // Very subtle alpha
+    const alpha = 0.04 * (1 - t) * alphaMultiplier;
+
+    // Minimal Y-offset for grounded look
+    const offsetY = size * 0.1;
+
+    graphics.beginPath();
+    graphics.circle(x, y + offsetY, layerSize);
+    graphics.fill({ color, alpha: Math.max(0, alpha) });
+  }
+}
+
+export function drawHeart(
+  graphics,
+  x,
+  y,
+  size,
+  color
+) {
+  const s = size * 0.8;
+
+  // 1. Base (Darker Edge)
+  graphics.beginPath();
+  renderHeartPath(graphics, x, y, s);
+  graphics.fill({ color });
+
+  // 2. Inner (Lighter Body) - Creates "Two-Tone" shading
+  // Scale down slightly for the inner fill
+  const innerS = s * 0.7;
+  const innerColor = lighten(color, 0.3); // Visible contrast
+
+  graphics.beginPath();
+  renderHeartPath(graphics, x, y - (s - innerS) * 0.2, innerS); // Slight Y offset to center visually
+  graphics.fill({ color: innerColor });
+}
+
+/** Helper for plumper, lush heart geometry */
+function renderHeartPath(graphics, x, y, s) {
+  // Shallower dip at top-center (Moved up from +0.2 to -0.05)
+  graphics.moveTo(x, y - s * 0.05);
+
+  // Left lobe (Plump and high)
+  graphics.bezierCurveTo(x - s * 0.5, y - s * 0.8, x - s * 1.2, y - s * 0.4, x - s * 1.2, y + s * 0.3);
+
+  // Left bottom to sharp point
+  graphics.bezierCurveTo(x - s * 1.2, y + s * 0.7, x - s * 0.2, y + s * 1.1, x, y + s * 1.3);
+
+  // Right bottom from sharp point
+  graphics.bezierCurveTo(x + s * 0.2, y + s * 1.1, x + s * 1.2, y + s * 0.7, x + s * 1.2, y + s * 0.3);
+
+  // Right lobe (Plump and high)
+  graphics.bezierCurveTo(x + s * 1.2, y - s * 0.4, x + s * 0.5, y - s * 0.8, x, y - s * 0.05);
+}

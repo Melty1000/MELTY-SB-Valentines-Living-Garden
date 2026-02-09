@@ -1,0 +1,268 @@
+import { Graphics, Container, Sprite } from 'pixi.js';
+import {
+    StrandPoint,
+    ThornData,
+    LeafData,
+    TwigData,
+    VinePoint
+} from './VineTypes.js';
+import { VineColors } from '../../utils/colors.js';
+import { FoliageCache, FoliageType } from './FoliageCache.js';
+import { TendrilCache } from './TendrilCache.js';
+import { VineStrandMesh } from './VineStrandMesh.js';
+
+/**
+ * High-Performance Vine Renderer using SimpleMesh.
+ * 
+ * Performance improvements over original Graphics-based approach:
+ * - No per-frame graphics.clear() — uses mesh vertex updates
+ * - Tendrils baked to textures — drawn once, displayed
+ * - Per-vertex width for tapering — no segmented stroke calls
+ */
+export class VineRenderer {
+    // Mesh-based strand rendering (replaces Graphics)
+  backStrandMesh;
+  frontStrandMesh;
+
+    // Containers for z-ordering
+  backContainer;
+  frontContainer;
+  leafContainer;
+  frontLeafContainer;
+  thornContainer;
+  frontThornContainer;
+  twigContainer;
+  frontTwigContainer;
+
+    // Sprite pools
+  leafSprites = [];
+  thornSprites = [];
+  twigSprites = [];
+  isBackground;
+  renderer, isBackground) {
+        this.isBackground = isBackground;
+
+        // Create containers
+        this.backContainer = new Container();
+        this.frontContainer = new Container();
+        this.leafContainer = new Container();
+        this.frontLeafContainer = new Container();
+        this.thornContainer = new Container();
+        this.frontThornContainer = new Container();
+        this.twigContainer = new Container();
+        this.frontTwigContainer = new Container();
+
+        // Create mesh renderers
+        this.backStrandMesh = new VineStrandMesh(this.backContainer);
+        this.frontStrandMesh = new VineStrandMesh(this.frontContainer);
+
+        // Add to parent in z-order (if parent available)
+        if (graphics.parent) {
+            this.setupContainerHierarchy(graphics);
+        }
+
+        // Hide original graphics (keep for compatibility)
+        graphics.visible = false;
+    }
+  setupContainerHierarchy(graphics) {
+        const parent = graphics.parent!;
+        const idx = parent.getChildIndex(graphics);
+
+        // Z-order: back → backTwigs → backLeaves → backThorns → front → frontTwigs → frontLeaves → frontThorns
+        parent.addChildAt(this.backContainer, idx + 1);
+        parent.addChildAt(this.twigContainer, idx + 2);
+        parent.addChildAt(this.leafContainer, idx + 3);
+        parent.addChildAt(this.thornContainer, idx + 4);
+        parent.addChildAt(this.frontContainer, idx + 5);
+        parent.addChildAt(this.frontTwigContainer, idx + 6);
+        parent.addChildAt(this.frontLeafContainer, idx + 7);
+        parent.addChildAt(this.frontThornContainer, idx + 8);
+    }
+  setRenderer(renderer) {
+        this.renderer = renderer;
+    }
+  render(state) {
+        const totalLength = state.vinePoints[state.vinePoints.length - 1].len;
+        this.lastTotalLength = totalLength;
+
+        // Initialize meshes on first render (now we have point count)
+        if (!this.initialized && state.strands[0].length > 0) {
+            this.backStrandMesh.initialize(state.strands[0].length);
+            this.frontStrandMesh.initialize(state.strands[0].length);
+            this.initialized = true;
+        }
+
+        // 1. Update strand mesh positions (no clear needed!)
+        this.updateStrandMeshes(state);
+
+        // 2. Render foliage (leaves, thorns — already efficient)
+        this.renderFoliage(state, totalLength);
+
+        // 3. Render twigs sprites (not procedural drawing)
+        this.renderTwigs(state, totalLength);
+    }
+  updateStrandMeshes(state) {
+        // DEBUG: Log every second using window global
+        const now = Date.now();
+        const w = window;
+        if (!w._vineDebugLog || now - w._vineDebugLog > 1000) {
+            w._vineDebugLog = now;
+            const mid = Math.floor(state.strands[0].length / 2);
+            const s0 = state.strands[0][mid];
+            const s1 = state.strands[1][mid];
+            if (s0 && s1) {
+                console.log(`[DEBUG] growth=${state.growth.toFixed(2)} MidIdx=${mid} S0=(${s0.x?.toFixed(1)}, ${s0.y?.toFixed(1)}) S1=(${s1.x?.toFixed(1)}, ${s1.y?.toFixed(1)}) Diff=(${(s1.x - s0.x).toFixed(1)}, ${(s1.y - s0.y).toFixed(1)})`);
+            } else {
+                console.log(`[DEBUG] s0=${!!s0}, s1=${!!s1}, strands[0].len=${state.strands[0].length}, strands[1].len=${state.strands[1].length}`);
+            }
+        }
+
+        // Pass full strand arrays — mesh handles culled points (t === -1) internally
+        this.backStrandMesh.updatePositions(state.strands[0], state.growth);
+        this.frontStrandMesh.updatePositions(state.strands[1], state.growth);
+    }
+  renderTwigs(state, totalLength) {
+        if (!this.renderer) return;
+
+        // Reset sprite visibility
+        this.twigSprites.forEach(s => s.visible = false);
+        let twigIdx = 0;
+
+        for (const twig of state.twigs) {
+            if (!this.isItemVisible(twig.t, state.growth)) continue;
+
+            const anchor = this.getFoliageAnchor(state, twig.strandIdx, twig.t, twig.angleOffset, totalLength);
+            if (!anchor.p) continue;
+
+            // Get or create sprite
+            if (!this.twigSprites[twigIdx]) {
+                const sprite = new Sprite();
+                sprite.anchor.set(0, 0.5); // Anchor at base, center vertically
+                this.twigSprites.push(sprite);
+            }
+
+            const sprite = this.twigSprites[twigIdx++];
+            const parent = anchor.isFront ? this.frontTwigContainer : this.twigContainer;
+            parent.addChild(sprite);
+
+            sprite.visible = true;
+            sprite.texture = TendrilCache.getTexture(this.renderer, twig.length, twig.curls, twig.curlSign);
+            sprite.position.set(anchor.p.x, anchor.p.y);
+            sprite.rotation = anchor.angle;
+        }
+    }
+  renderFoliage(state, totalLength) {
+        this.leafSprites.forEach(s => s.visible = false);
+        this.thornSprites.forEach(s => s.visible = false);
+        let leafIdx = 0;
+        let thornIdx = 0;
+
+        const skipColor = this.isBackground ? 0x1e3a1e : VineColors.leaf;
+        const leafAlpha = this.isBackground ? 0.4 : 1.0;
+
+        // Leaves (Sprites)
+        if (this.renderer) {
+            for (const leaf of state.leaves) {
+                if (!this.isItemVisible(leaf.t, state.growth)) continue;
+                const { p, angle, isFront, size } = this.getFoliageAnchor(state, leaf.strandIdx, leaf.t, leaf.angleOffset, totalLength, leaf.size);
+                if (!p) continue;
+
+                const parent = isFront ? this.frontLeafContainer : this.leafContainer;
+                if (!this.leafSprites[leafIdx]) {
+                    const s = new Sprite();
+                    s.anchor.set(0.5);
+                    this.leafSprites.push(s);
+                }
+                const sprite = this.leafSprites[leafIdx++];
+                parent.addChild(sprite);
+                sprite.visible = true;
+                sprite.texture = FoliageCache.getTexture(this.renderer, FoliageType.Leaf, size, 0, skipColor);
+                sprite.position.set(p.x, p.y);
+                sprite.rotation = angle;
+                sprite.alpha = leafAlpha;
+            }
+        }
+
+        // Thorns (Sprites)
+        if (this.renderer) {
+            for (const th of state.thorns) {
+                if (!this.isItemVisible(th.t, state.growth)) continue;
+                const { p, angle, isFront, size } = this.getFoliageAnchor(state, th.strandIdx, th.t, th.angleOffset, totalLength, th.size);
+                if (!p) continue;
+
+                const parent = isFront ? this.frontThornContainer : this.thornContainer;
+                if (!this.thornSprites[thornIdx]) {
+                    const s = new Sprite();
+                    s.anchor.set(0.5);
+                    this.thornSprites.push(s);
+                }
+                const sprite = this.thornSprites[thornIdx++];
+                parent.addChild(sprite);
+                sprite.visible = true;
+                sprite.texture = FoliageCache.getTexture(this.renderer, FoliageType.Thorn, size, 0, VineColors.main);
+                sprite.position.set(p.x, p.y);
+                sprite.rotation = angle;
+            }
+        }
+    }
+  isItemVisible(t, growth) {
+        let distFromCenter = Math.abs(t - 0.5);
+        if (distFromCenter > 0.5) distFromCenter = 1.0 - distFromCenter;
+        return distFromCenter <= growth * 0.5;
+    }
+  getFoliageAnchor(state, strandIdx, t, angleOffset, _totalLength, baseSize?: number): { p, angle, isFront, size: number } {
+        const idx = Math.floor(t * (state.vinePoints.length - 1));
+        const p = state.strands[strandIdx][idx];
+        if (!p || p.t === -1) return { p, angle, isFront, size: 0 };
+
+        const next = state.vinePoints[Math.min(idx + 1, state.vinePoints.length - 1)];
+        const curr = state.vinePoints[idx];
+        const pathAngle = Math.atan2(next.y - curr.y, next.x - curr.x);
+        const angle = pathAngle + angleOffset;
+
+        const ph = strandIdx * Math.PI;
+        const zVal = Math.cos(this.getHelixAngle(curr.len, ph, curr.warp));
+        const isFront = zVal >= 0;
+
+        let size = 0;
+        if (baseSize !== undefined) {
+            // At full growth, foliage is full size - no tapering
+            if (state.growth >= 0.99) {
+                size = baseSize;
+            } else {
+                let distFromCenter = Math.abs(t - 0.5);
+                if (distFromCenter > 0.5) distFromCenter = 1.0 - distFromCenter;
+                const normalizedDist = (distFromCenter * 2.0) / (state.growth || 0.01);
+                const taperFactor = Math.pow(Math.max(0, 1.0 - normalizedDist), 1.2);
+                size = baseSize * taperFactor;
+            }
+        }
+
+        return { p, angle, isFront, size };
+    }
+  getHelixAngle(len, phaseOffset, warp) {
+        const relativeLen = len - (this.lastTotalLength * 0.5);
+        const pixelsPerCycle = 150;
+        const freq = (Math.PI * 2) / pixelsPerCycle;
+        return relativeLen * freq + phaseOffset + warp;
+    }
+  destroy() {
+        this.backStrandMesh.destroy();
+        this.frontStrandMesh.destroy();
+
+        this.leafSprites.forEach(s => s.destroy());
+        this.thornSprites.forEach(s => s.destroy());
+        this.twigSprites.forEach(s => s.destroy());
+
+        this.backContainer.destroy();
+        this.frontContainer.destroy();
+        this.leafContainer.destroy();
+        this.frontLeafContainer.destroy();
+        this.thornContainer.destroy();
+        this.frontThornContainer.destroy();
+        this.twigContainer.destroy();
+        this.frontTwigContainer.destroy();
+
+        TendrilCache.clear();
+    }
+}
