@@ -46,6 +46,10 @@ export class Garden extends Container {
     this.restoreFromPersistence();
   }
 
+  public setStreamerbotClient(client: any): void {
+    this.flowerManager.setStreamerbotClient(client);
+  }
+
   private setupEventListeners(): void {
     EventBus.on('app:resize', (data: { width: number; height: number }) => {
       this.resize(data.width, data.height);

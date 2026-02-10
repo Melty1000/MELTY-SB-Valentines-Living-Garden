@@ -50,9 +50,11 @@ export class FlowerCache {
 
         // Create texture
         // Add padding to prevent clipping
+        // REFINED: Increased resolution to 2x for sharp rendering on all displays
         const tex = renderer.generateTexture({
             target: this.tempGraphics,
-            resolution: 1,
+            resolution: 2, // Was 1, caused blurriness
+            antialias: true,
         });
 
         this.textures.set(key, tex);

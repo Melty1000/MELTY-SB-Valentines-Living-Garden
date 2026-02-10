@@ -4,6 +4,9 @@ export interface ChatterEventData {
   displayName: string;
   color?: string;
   messageCount: number;
+  message?: string;
+  isMod: boolean;
+  isBroadcaster: boolean;
   milestones: {
     bud: number;
     bloom: number;

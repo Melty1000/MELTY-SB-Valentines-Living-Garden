@@ -29,11 +29,14 @@ export class VineSimulator {
         this.vinePoints = [];
         const perimeter = (this.width * 2 + this.height * 2);
         const segments = Math.max(300, Math.ceil(perimeter / 8));
-        const r = this.height * 0.06;
-        const leftX = this.width * 0.03;
-        const rightX = this.width * 0.97;
-        const topY = this.height * 0.06;
-        const bottomY = this.height * 0.95;
+
+        // REFINED: Reduced padding to maximize screen usage (User Request)
+        // Tune 6: Specific request for Top 3%, Sides 1.5%
+        const r = this.height * 0.04;
+        const leftX = this.width * 0.015; // 1.5% (User specific)
+        const rightX = this.width * 0.985;
+        const topY = this.height * 0.03;  // 3.0% (User specific)
+        const bottomY = this.height * 0.97; // 3% (Kept from Tune 4)
         const centerX = this.width / 2;
 
         const sideW = rightX - leftX - 2 * r;

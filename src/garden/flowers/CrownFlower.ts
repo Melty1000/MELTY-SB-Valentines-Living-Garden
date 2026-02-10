@@ -68,6 +68,7 @@ export class CrownFlower extends Container {
 
   setType(type: CrownType): void { this.type = type; this.draw(); }
   setColor(color: number): void { this.color = color; this.draw(); }
+  getColor(): number { return this.color; }
 
   override destroy(): void {
     this.graphics.destroy();

@@ -138,8 +138,17 @@ export class Flower {
     else this.setStage(newStage);
   }
 
+  // Spin properties
+  private spinVelocity: number = 0;
+  private spinRotation: number = 0;
+
   startWobble(intensity: number = 1): void { this.wobbleAmount = 0.3 * intensity; }
   stopWobble(): void { this.wobbleAmount = 0; }
+
+  startSpin(): void {
+    // Initial burst of speed (radians/sec)
+    this.spinVelocity = 20 + Math.random() * 15;
+  }
 
   update(deltaTime: number, windOffset: number = 0): void {
     if (this.transitionProgress < 1) {
@@ -152,21 +161,30 @@ export class Flower {
       }
     }
 
+    // Spin Physics
+    if (Math.abs(this.spinVelocity) > 0.1) {
+      this.spinRotation += this.spinVelocity * deltaTime;
+      // Friction / Air Resistance
+      this.spinVelocity *= Math.pow(0.05, deltaTime);
+      if (Math.abs(this.spinVelocity) < 0.1) this.spinVelocity = 0;
+    }
+
     // Only update rotation/wobble if necessary to save CPU
     const hasWobble = this.wobbleAmount > 0;
     const hasWind = Math.abs(windOffset) > 0.01;
+    const hasSpin = this.spinRotation !== 0 || this.spinVelocity !== 0;
 
-    if (hasWobble || hasWind) {
+    if (hasWobble || hasWind || hasSpin) {
       const wobble = hasWobble ? Math.sin(performance.now() * 0.005 + this.wobbleOffset) * this.wobbleAmount : 0;
       const wind = windOffset * 0.02;
-      this.rotation = wobble + wind;
+
+      this.rotation = wobble + wind + this.spinRotation;
     }
 
     if (hasWobble) {
       this.wobbleAmount *= Math.pow(0.2, deltaTime);
       if (this.wobbleAmount < 0.01) {
         this.wobbleAmount = 0;
-        if (!hasWind) this.rotation = 0;
       }
     }
   }

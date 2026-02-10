@@ -45,11 +45,13 @@ export function drawRose(
   graphics.fill({ color: darken(baseColor, 0.4) }); // Softly darkened base occlusion
 
   // 2. LAYERED PETALS with heavy overlap and shading
+  // REFINED: Rotations offset to prevent alignment (User Request)
+  // Using Golden Angle-ish increments to ensure natural distribution
   const layers = [
-    { count: 7, radius: 0.85, rot: 0, scale: 1.25 },   // Outer
-    { count: 6, radius: 0.6, rot: 0.5, scale: 1.0 },     // Middle 1
-    { count: 5, radius: 0.4, rot: 1.1, scale: 0.8 },    // Middle 2
-    { count: 4, radius: 0.25, rot: 0.8, scale: 0.6 },   // Inner
+    { count: 6, radius: 0.85, rot: -0.15, scale: 1.25 }, // Outer: slight CCW tilt
+    { count: 5, radius: 0.6, rot: 1.0, scale: 1.0 },     // Middle 1
+    { count: 4, radius: 0.4, rot: 2.5, scale: 0.8 },     // Middle 2
+    { count: 4, radius: 0.25, rot: 3.3, scale: 0.6 },    // Inner: 4 petals (User Req), Staggered ~45 deg
   ];
 
   // Draw layers from outside in
@@ -68,6 +70,7 @@ export function drawRose(
     for (let i = 0; i < layer.count; i++) {
       const angle = (i / layer.count) * Math.PI * 2 + layer.rot;
       const dist = scaledSize * layer.radius * 0.5 * openness;
+      // Slightly reduced petal size for spacing
       const pSize = scaledSize * 0.65 * layer.scale;
 
       drawShadedPetal(graphics, x, y, angle, dist, pSize, layerColor);
@@ -93,6 +96,7 @@ function drawShadedPetal(
   const px = x + Math.cos(angle) * dist;
   const py = y + Math.sin(angle) * dist;
 
+  // REFINED: Wider width (2.0) per user request
   const w = size * 2.0;
   const h = size * 1.3;
 
@@ -133,12 +137,12 @@ function drawShadedPetal(
   );
   graphics.fill({ color: 0x000000, alpha: 0.25 });
 
-  // BEZIER HIGHLIGHT: Subtle, follows actual petal shape
+  // REFINED: Darker outline matches fill shape exactly
   graphics.beginPath();
-  graphics.moveTo(leftX + (tipX - leftX) * 0.3, leftY + (tipY - leftY) * 0.3);
-  graphics.bezierCurveTo(cp2Lx, cp2Ly, tipX, tipY, tipX, tipY);
-  graphics.bezierCurveTo(cp1Rx, cp1Ry, cp2Rx, cp2Ry, rightX + (tipX - rightX) * 0.3, rightY + (tipY - rightY) * 0.3);
-  graphics.stroke({ width: 0.8, color: lerpColor(color, 0xffffff, 0.4), alpha: 0.25 });
+  graphics.moveTo(px, py);
+  graphics.bezierCurveTo(cp1Lx, cp1Ly, cp2Lx, cp2Ly, tipX, tipY);
+  graphics.bezierCurveTo(cp1Rx, cp1Ry, cp2Rx, cp2Ry, px, py);
+  graphics.stroke({ width: 1.0, color: darken(color, 0.4), alpha: 0.6 });
 }
 
 /**

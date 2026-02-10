@@ -195,14 +195,7 @@ export class Vine extends Container {
       }
     }
 
-    // DEBUG: Log strand positions to verify they're different
-    if (Math.floor(time) % 2 === 0 && Math.floor(time * 10) % 10 === 0) {
-      const pt0 = this.strandPool[0][100];
-      const pt1 = this.strandPool[1][100];
-      if (pt0 && pt1 && pt0.t !== -1 && pt1.t !== -1) {
-        console.log(`[Sway Debug] Strand0: (${pt0.x.toFixed(1)}, ${pt0.y.toFixed(1)})  Strand1: (${pt1.x.toFixed(1)}, ${pt1.y.toFixed(1)})  Diff: (${(pt1.x - pt0.x).toFixed(1)}, ${(pt1.y - pt0.y).toFixed(1)})`);
-      }
-    }
+
 
     return this.strandPool;
   }
@@ -353,6 +346,10 @@ export class Vine extends Container {
 
   public setCrownColor(color: number): void {
     this.crownFlower.setColor(color);
+  }
+
+  public getCrownColor(): number {
+    return this.crownFlower.getColor();
   }
 
   public resize(w: number, h: number): void {

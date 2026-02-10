@@ -33,7 +33,7 @@ export class Sparkles extends Container {
   private initPool(renderer: Renderer): void {
     // 1. Create a "Master" sparkle graphics to bake into a texture
     const graphics = new Graphics();
-    const size = 10; // Max size for texture
+    const size = 6; // Reduced from 10
     graphics.star(0, 0, 4, size, size * 0.4);
     graphics.fill({ color: 0xFFFFFF }); // Use white so we can tint
 
@@ -87,7 +87,7 @@ export class Sparkles extends Container {
     particle.vy = Math.sin(angle) * speed;
     particle.life = config.particles.lifetime;
     particle.maxLife = config.particles.lifetime;
-    particle.scale = randomRange(0.5, 1.5);
+    particle.scale = randomRange(0.3, 1.0); // Reduced from 0.5, 1.5
     particle.rotation = randomRange(0, Math.PI * 2);
     particle.rotationSpeed = randomRange(-0.1, 0.1);
     particle.active = true;

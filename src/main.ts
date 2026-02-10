@@ -64,6 +64,7 @@ class LivingGarden {
     }
 
     await this.app.init(container);
+    this.app.ticker.maxFPS = config.maxFPS;
 
     assetLoader.setRenderer(this.app.renderer);
     await assetLoader.loadAssets();
@@ -115,6 +116,9 @@ class LivingGarden {
       console.warn('[LivingGarden] Could not connect to Streamerbot:', error);
       console.log('[LivingGarden] Running in standalone mode');
     }
+
+    // Inject client into Garden for presence pruning
+    this.garden.setStreamerbotClient(this.streamerbotClient);
 
     console.log('[LivingGarden] Initialized successfully');
   }

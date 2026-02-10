@@ -94,9 +94,15 @@ export class DebugUI {
                 return;
             }
 
-            const action = target.getAttribute('data-action');
-            const value = target.getAttribute('data-value') || undefined;
+            // Improved delegation using closest() to catch clicks on children (icons, etc)
+            const btn = (e.target as HTMLElement).closest('[data-action]');
+            if (!btn) return;
+
+            const action = btn.getAttribute('data-action');
+            const value = btn.getAttribute('data-value') || undefined;
+
             if (action) {
+                // console.log(`[DebugUI] Action: ${action}, Value: ${value}`);
                 this.handleAction(action, value);
             }
 
@@ -325,8 +331,17 @@ export class DebugUI {
             case 'force-stage':
                 if (value !== undefined) {
                     const stage = parseInt(value) as FlowerStage;
-                    this.options.garden?.getFlowerManager()?.forceStage(stage);
-                    updateActiveGrid('force-stage', value);
+                    const manager = this.options.garden?.getFlowerManager();
+                    if (manager) {
+                        // UX Fix: If garden is empty, spawn a flower so the user sees something happen
+                        if (manager.getFlowerCount() === 0) {
+                            console.log('[DebugUI] Force Stage clicked on empty garden. Spawning debug flower first...');
+                            this.handleAction('spawn-flower');
+                        }
+
+                        manager.forceStage(stage);
+                        updateActiveGrid('force-stage', value);
+                    }
                 }
                 break;
 
@@ -381,6 +396,13 @@ export class DebugUI {
                     userName: 'NewSub',
                     displayName: 'NewSub',
                     tier: '1000',
+                });
+                break;
+            case 'event-follow':
+                EventBus.emit(GardenEvents.FOLLOW, {
+                    userId: testId(),
+                    userName: 'NewFollower',
+                    displayName: 'NewFollower',
                 });
                 break;
             case 'event-gift-bomb':

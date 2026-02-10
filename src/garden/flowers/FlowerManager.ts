@@ -8,7 +8,8 @@ import { EventBus, GardenEvents } from '../../core/EventBus';
 import { userIdToColor, parseTwitchColor } from '../../utils/colors';
 import { config } from '../../config';
 import { stringToSeed } from '../../utils/math';
-import { PersistenceManager } from '../../core/PersistenceManager';
+import { PersistenceManager, PersistentEntity } from '../../core/PersistenceManager';
+import type { StreamerbotClient } from '../../connection/StreamerbotClient';
 import type { ChatterEventData, SubscriptionEventData, GiftBombEventData, FollowEventData } from '../../connection/types';
 
 interface FlowerRenderState {
@@ -20,11 +21,14 @@ interface FlowerRenderState {
 export class FlowerManager extends Container {
   private flowers: Map<string, Flower & { attachT: number, strandIdx: number }> = new Map();
   private hearts: Map<string, GlowingHeart & { attachT: number, strandIdx: number }> = new Map();
+  private archivedFlowers: Map<string, PersistentEntity> = new Map(); // Stored data for pruned users
+  private ignoredUsers: Set<string> = new Set();
   private entityRenderMap: Map<string, FlowerRenderState> = new Map();
 
   private vine: Vine;
   private renderer: any = null;
   private occupiedPoints: AttachmentPoint[] = [];
+  private lastPruneTime: number = 0; // Throttle forced pruning
 
   // High-performance layers
   private mainLayer: Container;
@@ -53,6 +57,11 @@ export class FlowerManager extends Container {
 
   public setRenderer(renderer: any): void {
     this.renderer = renderer;
+  }
+
+  private streamerbotClient: StreamerbotClient | null = null;
+  public setStreamerbotClient(client: StreamerbotClient): void {
+    this.streamerbotClient = client;
   }
 
   private setupEventListeners(): void {
@@ -86,23 +95,110 @@ export class FlowerManager extends Container {
     }
   }
 
-  private handleChatter(data: ChatterEventData): void {
+  private async handleChatter(data: ChatterEventData): Promise<void> {
+
+    // --- 1. Command Handling (!hideflower / !showflower) ---
+    const msg = String(data.message || '').trim();
+    if (msg.startsWith('!')) {
+      const parts = msg.split(' ');
+      const command = parts[0].toLowerCase();
+
+      console.log(`[FlowerManager] Received Command: ${command} from ${data.userName} (Mod: ${data.isMod}, BC: ${data.isBroadcaster})`);
+      const targetUser = parts[1] ? parts[1].replace('@', '').toLowerCase() : ''; // Normalize target
+
+      if (data.isMod || data.isBroadcaster) {
+        if (command === '!hideflower' && targetUser) {
+          console.log(`[FlowerManager] Ignoring user: ${targetUser} (Requested by ${data.userName})`);
+          this.ignoredUsers.add(targetUser);
+
+          // Remove if they exist (Active or Archive)
+          let existingUserId: string | undefined;
+
+          // Check active (Search by UserName)
+          for (const [key, f] of this.flowers.entries()) {
+            if (f.data.userName.toLowerCase() === targetUser) existingUserId = key;
+          }
+          if (existingUserId) this.removeFlower(existingUserId);
+
+          existingUserId = undefined;
+
+          // Check archive (remove even from archive to "ban" fully)
+          for (const [key, f] of this.archivedFlowers.entries()) {
+            if (f.data.userName.toLowerCase() === targetUser) existingUserId = key;
+          }
+          if (existingUserId) {
+            this.archivedFlowers.delete(existingUserId);
+          }
+
+          this.saveState();
+          return;
+        }
+
+        if (command === '!showflower' && targetUser) {
+          console.log(`[FlowerManager] Un-ignoring user: ${targetUser} (Requested by ${data.userName})`);
+          this.ignoredUsers.delete(targetUser);
+          this.saveState();
+          return;
+        }
+      }
+    }
+
+    // --- 2. Ignore Check ---
+    if (this.ignoredUsers.has(data.userName.toLowerCase()) || this.ignoredUsers.has(data.userId)) {
+      // console.log(`[FlowerManager] Skipped ignored user: ${data.userName}`); // Verbose
+      return;
+    }
+
+
     let flower = this.flowers.get(data.userId);
 
     if (flower) {
+      const oldStage = flower.stage;
       flower.data.messageCount += (data.messageCount || 1);
+
       // Actual growth trigger!
       flower.updateFromMessageCount(flower.data.messageCount, config.milestones);
-    } else {
-      // New Chatter: Pre-emptively grow vine to ensure space
-      this.updateVineGrowth(1);
 
-      const newFlower = this.spawnFlower(data);
-      if (newFlower) {
-        flower = newFlower as any;
-        EventBus.emit(GardenEvents.FLOWER_GROW, { flower, data });
-        // Recalculate without extra, now that it's added
-        this.updateVineGrowth();
+      const newStage = flower.stage;
+
+      // 1. Notify if stage changed (to trigger growth sparkles)
+      if (newStage !== oldStage) {
+        EventBus.emit(GardenEvents.FLOWER_GROW, { flower, stage: newStage });
+      }
+      // 2. Radiant Interaction: Spew light sparkles on every message
+      else if (newStage === FlowerStage.Radiant) {
+        EventBus.emit(GardenEvents.FLOWER_GROW, { flower, stage: newStage, interaction: true });
+      }
+    } else {
+      // 1. Check Archive First
+      if (this.archivedFlowers.has(data.userId)) {
+        console.log(`[FlowerManager] Restoring archived flower for ${data.userName}`);
+        const archived = this.archivedFlowers.get(data.userId)!;
+
+        // Merge latest data with archived data (preserve progress)
+        data.messageCount = (archived.data.messageCount || 0) + (data.messageCount || 1);
+
+        // Re-spawn using archived stats logic
+        const restored = this.spawnFlower(data);
+        if (restored) {
+          flower = restored as any;
+          this.archivedFlowers.delete(data.userId); // Remove from archive once active
+          EventBus.emit(GardenEvents.FLOWER_GROW, { flower, data });
+        }
+      } else {
+        // 2. New Chatter: Trigger Quick Prune to free space if needed
+        await this.reapZombies(performance.now() * 0.001, true);
+
+        // Pre-emptively grow vine to ensure space
+        this.updateVineGrowth(1);
+
+        const newFlower = this.spawnFlower(data);
+        if (newFlower) {
+          flower = newFlower as any;
+          EventBus.emit(GardenEvents.FLOWER_GROW, { flower, data });
+          // Recalculate without extra, now that it's added
+          this.updateVineGrowth();
+        }
       }
     }
 
@@ -220,8 +316,14 @@ export class FlowerManager extends Container {
   }
 
   private handleFollow(_data: FollowEventData): void {
-    // Rain petals for follows (global effect)
-    EventBus.emit(GardenEvents.PETAL_RAIN, { count: 60 });
+    // 1. Full-width Rain (User Request: "The entire width")
+    // Increased count to 100 for better density
+    EventBus.emit(GardenEvents.PETAL_RAIN, { count: 100 });
+
+    // 2. Spin all flowers (User Request)
+    for (const flower of this.flowers.values()) {
+      flower.startSpin();
+    }
   }
 
   private triggerPetalBurst(): void {
@@ -337,7 +439,11 @@ export class FlowerManager extends Container {
 
           let cacheType = CacheType.Seed;
           if (renderData.stage === FlowerStage.Bud) cacheType = CacheType.Bud;
-          if (renderData.stage === FlowerStage.Blooming && renderData.openness < 0.3) cacheType = CacheType.Bud;
+          else if (renderData.stage === FlowerStage.Blooming) {
+            cacheType = renderData.openness < 0.3 ? CacheType.Bud : CacheType.Rose;
+          } else if (renderData.stage > FlowerStage.Blooming) {
+            cacheType = CacheType.Rose;
+          }
 
           // So we fetch texture from cache:
           const tex = FlowerCache.getTexture(
@@ -389,19 +495,67 @@ export class FlowerManager extends Container {
       heart.update(deltaTime, windOffset);
     }
 
-    // 3. The Reaper: Check for inactive flowers every few seconds
-    if (Math.floor(time) % 10 === 0 && this.flowers.size > 20) {
+    // 3. The Reaper: Check for inactive flowers every 30 minutes (1800s)
+    // Primary pruning is now done on-demand when new chatters arrive.
+    // Ensure we don't run this immediately on startup (wait 60s)
+    if (time > 60 && Math.floor(time) % 1800 === 0 && this.flowers.size > 20) {
       this.reapZombies(time);
     }
   }
 
-  private reapZombies(now: number): void {
-    const timeout = config.flower.zombieTimeout || 3600;
+  /**
+   * Prunes users who are no longer present in chat/viewer list.
+   * @param now Current time in seconds.
+   * @param force Forced check (e.g. on new chatter arrival). If false, runs on 30m interval.
+   */
+  private async reapZombies(now: number, force: boolean = false): Promise<void> {
+    const timeout = config.flower.zombieTimeout || 1800; // Default 30 minutes
+
+    // Throttle forced checks (minimum 15s between checks to save API)
+    if (force && (now - this.lastPruneTime < 15)) {
+      return;
+    }
+    this.lastPruneTime = now;
+
     const toRemove: string[] = [];
 
-    for (const [userId, flower] of this.flowers.entries()) {
-      if (now - flower.getLastInteraction() > timeout) {
-        toRemove.push(userId);
+    // 1. Time-based fallback (Safety net) - Only run this on the long interval
+    if (!force) {
+      for (const [userId, flower] of this.flowers.entries()) {
+        if (now - flower.getLastInteraction() > timeout) {
+          console.log(`[FlowerManager] Pruning timed-out user (Fallback): ${flower.data.userName}`);
+          toRemove.push(userId);
+        }
+      }
+    }
+
+    // 2. Presence-based pruning (Smart)
+    if (this.streamerbotClient && this.streamerbotClient.isConnected()) {
+      try {
+        const viewers = await this.streamerbotClient.getViewers();
+
+        // Only prune based on presence if we actually got a valid list
+        if (viewers && viewers.length > 0) {
+          // Create a Set for O(1) lookups. Normalize to lowercase for safety.
+          const currentViewerIds = new Set(viewers.map(v => v.userId));
+          const currentViewerNames = new Set(viewers.map(v => v.userName.toLowerCase()));
+
+          // Check every flower owner
+          for (const [userId, flower] of this.flowers.entries()) {
+            // Skip if already marked for time-out
+            if (toRemove.includes(userId)) continue;
+
+            const isPresent = currentViewerIds.has(userId) || currentViewerNames.has(flower.data.userName.toLowerCase());
+
+            // Strict Pruning: If they aren't here, they go to the archive. No strikes.
+            if (!isPresent) {
+              console.log(`[FlowerManager] Pruning absent user (Moving to Archive): ${flower.data.userName} (${userId})`);
+              toRemove.push(userId);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[FlowerManager] Failed to prune by presence:', err);
       }
     }
 
@@ -413,6 +567,15 @@ export class FlowerManager extends Container {
   public removeFlower(userId: string): void {
     const flower = this.flowers.get(userId);
     if (flower) {
+      // ARCHIVE DATA BEFORE DELETION
+      // Store the exact state so we can restore it later
+      this.archivedFlowers.set(userId, {
+        userId,
+        data: flower.data,
+        attachT: flower.attachT,
+        strandIdx: flower.strandIdx
+      });
+
       // Remove from occupancy list
       this.occupiedPoints = this.occupiedPoints.filter(p => p.t !== flower.attachT || p.strandIdx !== flower.strandIdx);
 
@@ -482,12 +645,22 @@ export class FlowerManager extends Container {
     PersistenceManager.save({
       flowers,
       hearts,
-      growth: this.vine.getGrowth()
+      archivedFlowers: Array.from(this.archivedFlowers.values()),
+      ignoredUsers: Array.from(this.ignoredUsers),
+      growth: this.vine.getGrowth(),
+      crownColor: this.vine.getCrownColor()
     });
   }
 
   public restoreState(state: any): void {
     console.log('[FlowerManager] Restoring state...', state);
+
+    // Restore Crown Color if present
+    if (state.crownColor !== undefined) {
+      console.log(`[FlowerManager] Restoring crown color: ${state.crownColor.toString(16)}`);
+      this.vine.setCrownColor(state.crownColor);
+    }
+
     if (state.flowers && state.flowers.length > 0) {
       console.log(`[FlowerManager] Spawning ${state.flowers.length} flowers from state...`);
       state.flowers.forEach((f: any) => {
@@ -502,6 +675,19 @@ export class FlowerManager extends Container {
         if (!flower) console.warn(`[FlowerManager] Failed to restore flower ${f.userId}`);
       });
     }
+
+    if (state.archivedFlowers) {
+      console.log(`[FlowerManager] Restoring ${state.archivedFlowers.length} archived flowers...`);
+      state.archivedFlowers.forEach((f: PersistentEntity) => {
+        this.archivedFlowers.set(f.userId, f);
+      });
+    }
+
+    if (state.ignoredUsers) {
+      console.log(`[FlowerManager] Restoring ${state.ignoredUsers.length} ignored users...`);
+      state.ignoredUsers.forEach((u: string) => this.ignoredUsers.add(u));
+    }
+
     if (state.hearts) {
       state.hearts.forEach((h: any) => {
         let forcedPoint = undefined;

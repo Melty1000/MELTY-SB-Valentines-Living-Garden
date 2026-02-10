@@ -88,6 +88,7 @@ export class StreamerbotClient {
 
   private handleRawEvent(type: string, rawData: unknown): void {
     const data = rawData as any;
+    // console.log('[StreamerbotClient] Raw Event:', type, JSON.stringify(data)); // Verbose Debug
 
     const getIdentity = (d: any) => {
       const user = d.user || d.message?.user || d.data?.user || d.data?.message?.user || {};
@@ -110,27 +111,40 @@ export class StreamerbotClient {
         const lowerBroadcasterName = (this.broadcasterName || '').toLowerCase();
         const lowerIdentityName = identity.userName.toLowerCase();
 
+        // Access the actual message object from the raw event structure
+        const msgObj = data.message || data.data?.message || {};
+        const msgText = msgObj.message || msgObj.text || '';
+        const badges = msgObj.badges || data.badges || [];
+
         const isBroadcaster =
           (lowerConfigName && lowerIdentityName === lowerConfigName) ||
           (lowerBroadcasterName && lowerIdentityName === lowerBroadcasterName && lowerBroadcasterName !== 'streamer.bot') ||
           (this.broadcasterId && identity.userId === this.broadcasterId) ||
-          (data.badges || data.message?.badges || []).some((b: any) =>
+          badges.some((b: any) =>
             b.name === 'broadcaster' || b.id === 'broadcaster' || b.type === 'broadcaster'
           );
 
         if (isBroadcaster && identity.color) {
-          console.log(`[StreamerbotClient] Broadcaster detected! Syncing color: ${identity.color}`);
+          // console.log(`[StreamerbotClient] Broadcaster detected! Syncing color: ${identity.color}`);
           EventBus.emit(GardenEvents.BROADCASTER_COLOR, { color: identity.color });
         }
+
+        const isMod = badges.some((b: any) =>
+          b.name === 'moderator' || b.id === 'moderator' || b.type === 'moderator'
+        );
 
         this.eventMapper.mapStreamerbotEvent({
           event: 'chatter',
           data: {
             ...identity,
             messageCount: data.messageCount || 1,
+            isMod,
+            isBroadcaster,
             milestones: data.milestones || config.milestones,
+            message: msgText // Pass actual message string
           },
         });
+
         break;
       }
 
@@ -288,6 +302,34 @@ export class StreamerbotClient {
       this.client = null;
     }
     this.isClientConnected = false;
+  }
+
+  async getViewers(): Promise<{ userId: string; userName: string; }[]> {
+    if (!this.client || !this.isClientConnected) return [];
+
+    try {
+      // Try generic GetViewers first (custom actions often map to this)
+      let response = await (this.client.request({ request: 'GetViewers' } as any).catch(() => null)) as any;
+
+      // Fallback: GetTwitchChatters (Native in some versions)
+      if (!response) {
+        response = await (this.client.request({ request: 'GetTwitchChatters' } as any).catch(() => null)) as any;
+      }
+
+      if (response && (response.viewers || response.chatters)) {
+        const list = response.viewers || response.chatters || [];
+        // Map to consistent structure
+        return list.map((v: any) => ({
+          userId: String(v.userId || v.id),
+          userName: v.userName || v.login || v.name
+        }));
+      }
+      return [];
+    } catch (error) {
+      // Suppress annoying warning if not supported
+      // console.warn('[StreamerbotClient] GetViewers request failed:', error);
+      return [];
+    }
   }
 
   isConnected(): boolean {
