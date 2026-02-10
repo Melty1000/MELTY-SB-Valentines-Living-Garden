@@ -95,8 +95,9 @@ export class DebugUI {
             }
 
             const action = target.getAttribute('data-action');
+            const value = target.getAttribute('data-value') || undefined;
             if (action) {
-                this.handleAction(action);
+                this.handleAction(action, value);
             }
 
             // Handle copy-to-console
@@ -246,10 +247,49 @@ export class DebugUI {
         }
     }
 
-    private handleAction(action: string): void {
+    private showModal(title: string, message: string, onConfirm: () => void): void {
+        const overlay = this.container.querySelector('#debug-modal-overlay') as HTMLElement;
+        const titleEl = this.container.querySelector('#modal-title') as HTMLElement;
+        const msgEl = this.container.querySelector('#modal-message') as HTMLElement;
+        const confirmBtn = this.container.querySelector('#modal-confirm') as HTMLElement;
+        const cancelBtn = this.container.querySelector('#modal-cancel') as HTMLElement;
+
+        if (!overlay) return;
+
+        titleEl.textContent = title;
+        msgEl.textContent = message;
+        overlay.style.display = 'flex';
+
+        const close = () => {
+            overlay.style.display = 'none';
+            // Cleanup listeners to avoid dupes/leaks if reused
+            confirmBtn.onclick = null;
+            cancelBtn.onclick = null;
+        };
+
+        confirmBtn.onclick = () => {
+            onConfirm();
+            close();
+        };
+
+        cancelBtn.onclick = () => {
+            close();
+        };
+    }
+
+    private handleAction(action: string, value?: string): void {
         const getVal = (id: string) => (this.container.querySelector(`#${id}`) as HTMLInputElement)?.value;
         const getNum = (id: string, def = 0) => parseFloat(getVal(id)) || def;
         const getColor = (id: string) => parseInt(getVal(id).replace('#', ''), 16);
+
+        // Grid Button Active State Helper
+        const updateActiveGrid = (btnAction: string, btnValue: string) => {
+            const btns = this.container.querySelectorAll(`button[data-action="${btnAction}"]`);
+            btns.forEach(b => {
+                if (b.getAttribute('data-value') === btnValue) b.classList.add('active');
+                else b.classList.remove('active');
+            });
+        };
 
         // Unique ID helper
         const testId = () => `debug_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
@@ -266,12 +306,16 @@ export class DebugUI {
                 this.updateStatus();
                 break;
             case 'hard-reset':
-                if (confirm('Are you sure? This will wipe the ENTIRE persistent garden state.')) {
-                    this.options.garden?.getFlowerManager()?.clear();
-                    this.options.garden?.setGrowth(config.vine.defaultGrowth);
-                    PersistenceManager.clear();
-                    this.updateStatus();
-                }
+                this.showModal(
+                    'Hard Reset Garden?',
+                    'This will wipe the ENTIRE persistent garden state. Are you sure?',
+                    () => {
+                        this.options.garden?.getFlowerManager()?.clear();
+                        this.options.garden?.setGrowth(config.vine.defaultGrowth);
+                        PersistenceManager.clear();
+                        this.updateStatus();
+                    }
+                );
                 break;
 
             // Flowers
@@ -307,8 +351,11 @@ export class DebugUI {
                 console.log('[DebugUI] Garden cleared');
                 break;
             case 'force-stage':
-                const stage = parseInt(getVal('flower-stage')) as FlowerStage;
-                this.options.garden?.getFlowerManager()?.forceStage(stage);
+                if (value !== undefined) {
+                    const stage = parseInt(value) as FlowerStage;
+                    this.options.garden?.getFlowerManager()?.forceStage(stage);
+                    updateActiveGrid('force-stage', value);
+                }
                 break;
 
             // Particles
@@ -374,6 +421,7 @@ export class DebugUI {
                 break;
             case 'event-raid':
                 EventBus.emit(GardenEvents.RAID, {
+                    userId: 'raider',
                     viewers: getNum('raid-viewers', 50),
                     displayName: 'Raider',
                 });
@@ -410,7 +458,10 @@ export class DebugUI {
                 this.options.garden?.getVine()?.setCrownColor(getColor('crown-color'));
                 break;
             case 'set-crown-type':
-                this.options.garden?.getVine()?.getCrownFlower?.()?.setType?.(getVal('crown-type'));
+                if (value) {
+                    this.options.garden?.getVine()?.getCrownFlower?.()?.setType?.(value);
+                    updateActiveGrid('set-crown-type', value);
+                }
                 break;
             case 'toggle-crown':
                 const crown = this.options.garden?.getVine()?.getCrownFlower?.();

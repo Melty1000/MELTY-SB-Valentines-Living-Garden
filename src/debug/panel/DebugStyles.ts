@@ -167,4 +167,88 @@ export const DEBUG_STYLES = `
     display: flex;
     gap: 12px;
   }
+
+  /* Grid Layout for substituting selects */
+  #debug-ui .grid-buttons {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+    margin: 4px 0;
+  }
+  #debug-ui .grid-buttons button {
+    margin: 0;
+    font-size: 10px;
+    padding: 6px 2px;
+    background: #1e293b;
+    border: 1px solid #475569;
+  }
+  #debug-ui .grid-buttons button:hover {
+    background: #334155;
+    border-color: #64748b;
+  }
+  #debug-ui .grid-buttons button.active {
+    background: #3b82f6;
+    border-color: #60a5fa;
+    color: white;
+  }
+
+  /* Custom Modal for OBS Compatibility */
+  #debug-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    z-index: 9999999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  #debug-modal {
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 20px;
+    width: 300px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+    text-align: center;
+    color: white;
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+  #debug-modal h3 {
+    margin: 0 0 10px 0;
+    color: #ef4444;
+    font-size: 16px;
+  }
+  #debug-modal p {
+    margin: 0 0 20px 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #cbd5e1;
+  }
+  #debug-modal .modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+  }
+  #debug-modal button {
+    padding: 8px 16px;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 12px;
+  }
+  #debug-modal .confirm-btn {
+    background: #ef4444;
+    color: white;
+  }
+  #debug-modal .confirm-btn:hover { background: #dc2626; }
+  #debug-modal .cancel-btn {
+    background: #334155;
+    color: white;
+  }
+  #debug-modal .cancel-btn:hover { background: #475569; }
 `;

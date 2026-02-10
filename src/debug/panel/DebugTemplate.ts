@@ -43,18 +43,15 @@ export function generateDebugHTML(): string {
       <div class="btn-row">
         <button data-action="clear-flowers" class="danger">Clear All Flowers</button>
       </div>
-      <label>
-        Force Stage:
-        <select id="flower-stage">
-          <option value="0">Seed</option>
-          <option value="1">Bud</option>
-          <option value="2">Blooming</option>
-          <option value="3">FullBloom</option>
-          <option value="4">MegaBloom</option>
-          <option value="5">Radiant</option>
-        </select>
-        <button data-action="force-stage">Apply</button>
-      </label>
+      <label>Force Stage:</label>
+      <div class="grid-buttons">
+        <button data-action="force-stage" data-value="0">Seed</button>
+        <button data-action="force-stage" data-value="1">Bud</button>
+        <button data-action="force-stage" data-value="2">Bloom</button>
+        <button data-action="force-stage" data-value="3">Full</button>
+        <button data-action="force-stage" data-value="4">Mega</button>
+        <button data-action="force-stage" data-value="5">Radiant</button>
+      </div>
       <label>
         Flower Color:
         <input type="color" id="flower-color" value="#ff6b9d">
@@ -165,14 +162,11 @@ export function generateDebugHTML(): string {
         <input type="color" id="crown-color" value="#ff4444">
         <button data-action="set-crown-color">Apply</button>
       </label>
-      <label>
-        Crown Type:
-        <select id="crown-type">
-          <option value="rose">Rose</option>
-          <option value="heart">Heart</option>
-        </select>
-        <button data-action="set-crown-type">Apply</button>
-      </label>
+      <label>Crown Type:</label>
+      <div class="grid-buttons" style="grid-template-columns: 1fr 1fr;">
+        <button data-action="set-crown-type" data-value="rose">Rose</button>
+        <button data-action="set-crown-type" data-value="heart">Heart</button>
+      </div>
       <div class="btn-row">
         <button data-action="toggle-crown">Toggle Crown Visibility</button>
       </div>
@@ -266,6 +260,20 @@ export function generateDebugHTML(): string {
         <code style="background: #0f172a; padding: 8px; border-radius: 4px; font-size: 11px; cursor: pointer;" title="Click to copy" data-copy="gardenDebug.forceGust(3)">gardenDebug.forceGust(3)</code>
         <code style="background: #0f172a; padding: 8px; border-radius: 4px; font-size: 11px; cursor: pointer;" title="Click to copy" data-copy="EventBus.emit(GardenEvents.RAID, { viewers: 100 })">EventBus.emit(GardenEvents.RAID, { viewers: 100 })</code>
         <code style="background: #0f172a; padding: 8px; border-radius: 4px; font-size: 11px; cursor: pointer;" title="Click to copy" data-copy="EventBus.emit(GardenEvents.GIFT_BOMB, { count: 10 })">EventBus.emit(GardenEvents.GIFT_BOMB, { count: 10 })</code>
+      </div>
+    </div>
+      </div>
+    </div>
+    
+    <!-- MODAL OVERLAY -->
+    <div id="debug-modal-overlay" style="display: none;">
+      <div id="debug-modal">
+        <h3 id="modal-title">Confirm Action</h3>
+        <p id="modal-message">Are you sure?</p>
+        <div class="modal-actions">
+          <button id="modal-confirm" class="confirm-btn">Yes, Do It</button>
+          <button id="modal-cancel" class="cancel-btn">Cancel</button>
+        </div>
       </div>
     </div>
   `;
