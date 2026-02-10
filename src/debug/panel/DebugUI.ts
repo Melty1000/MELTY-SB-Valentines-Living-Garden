@@ -247,36 +247,6 @@ export class DebugUI {
         }
     }
 
-    private showModal(title: string, message: string, onConfirm: () => void): void {
-        const overlay = this.container.querySelector('#debug-modal-overlay') as HTMLElement;
-        const titleEl = this.container.querySelector('#modal-title') as HTMLElement;
-        const msgEl = this.container.querySelector('#modal-message') as HTMLElement;
-        const confirmBtn = this.container.querySelector('#modal-confirm') as HTMLElement;
-        const cancelBtn = this.container.querySelector('#modal-cancel') as HTMLElement;
-
-        if (!overlay) return;
-
-        titleEl.textContent = title;
-        msgEl.textContent = message;
-        overlay.style.display = 'flex';
-
-        const close = () => {
-            overlay.style.display = 'none';
-            // Cleanup listeners to avoid dupes/leaks if reused
-            confirmBtn.onclick = null;
-            cancelBtn.onclick = null;
-        };
-
-        confirmBtn.onclick = () => {
-            onConfirm();
-            close();
-        };
-
-        cancelBtn.onclick = () => {
-            close();
-        };
-    }
-
     private handleAction(action: string, value?: string): void {
         const getVal = (id: string) => (this.container.querySelector(`#${id}`) as HTMLInputElement)?.value;
         const getNum = (id: string, def = 0) => parseFloat(getVal(id)) || def;
@@ -306,16 +276,18 @@ export class DebugUI {
                 this.updateStatus();
                 break;
             case 'hard-reset':
-                this.showModal(
-                    'Hard Reset Garden?',
-                    'This will wipe the ENTIRE persistent garden state. Are you sure?',
-                    () => {
-                        this.options.garden?.getFlowerManager()?.clear();
-                        this.options.garden?.setGrowth(config.vine.defaultGrowth);
-                        PersistenceManager.clear();
-                        this.updateStatus();
-                    }
-                );
+                console.log('[DebugUI] Hard Reset triggered directly.');
+                this.options.garden?.getFlowerManager()?.clear();
+                this.options.garden?.setGrowth(config.vine.defaultGrowth);
+                PersistenceManager.clear();
+                this.updateStatus();
+                // Optional: visual feedback that it happened?
+                const btn = this.container.querySelector('button[data-action="hard-reset"]') as HTMLElement;
+                if (btn) {
+                    const originalText = btn.innerText;
+                    btn.innerText = 'RESETTING...';
+                    setTimeout(() => btn.innerText = originalText, 1000);
+                }
                 break;
 
             // Flowers

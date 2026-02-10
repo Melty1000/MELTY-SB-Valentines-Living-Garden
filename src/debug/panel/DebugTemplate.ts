@@ -264,17 +264,5 @@ export function generateDebugHTML(): string {
     </div>
       </div>
     </div>
-    
-    <!-- MODAL OVERLAY -->
-    <div id="debug-modal-overlay" style="display: none;">
-      <div id="debug-modal">
-        <h3 id="modal-title">Confirm Action</h3>
-        <p id="modal-message">Are you sure?</p>
-        <div class="modal-actions">
-          <button id="modal-confirm" class="confirm-btn">Yes, Do It</button>
-          <button id="modal-cancel" class="cancel-btn">Cancel</button>
-        </div>
-      </div>
-    </div>
   `;
 }
