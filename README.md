@@ -1,10 +1,10 @@
-# 🌿 Melty's SB Valentines Living Garden
+# 💗 Melty's SB Valentines Living Garden
 
 **A gorgeous, procedural, living bouquet for your Twitch stream!**
 
-![Version](https://img.shields.io/badge/version-1.1.0-FF69B4)
+![Version](https://img.shields.io/badge/version-1.0.0-FF69B4)
 ![PIXI.js](https://img.shields.io/badge/PIXI.js-v8-orange)
-![Streamer.bot](https://img.shields.io/badge/Streamer.bot-v0.2.2+-blue)
+![Streamer.bot](https://img.shields.io/badge/Streamer.bot-v1.0.4+-blue)
 
 ---
 
@@ -29,7 +29,15 @@ This overlay is designed to be used as an **OBS Browser Source**. It grows dynam
 9. ✅ Check **"Refresh browser when scene becomes active"** (keeps the connection fresh)
 10. Click **OK**
 
-### 🎨 Customizing Your Garden (Debug Mode)
+---
+
+## 🤖 Streamer.bot Setup
+
+There are no actions required for this overlay to operate! **Just ensure that your websocket server is turned on**.
+
+---
+
+### 🎨 Test Your Garden (Debug Mode)
 
 You can test the garden and tweak visual settings using the built-in Debug Panel:
 
@@ -58,36 +66,9 @@ You can test the garden and tweak visual settings using the built-in Debug Panel
 
 ---
 
-## 📴 Local/Offline Version
-
-Want to run this without an internet connection or modify the code?
-
-### How to Run Locally
-
-1. **Download the Source Code** via the green "Code" button > "Download ZIP".
-2. Extract the files to a folder.
-3. Open a terminal in the folder and run:
-   ```bash
-   npm install
-   npm run dev
-   ```
-4. Use the local URL (usually `http://localhost:5173`) in OBS.
-
-> **Note:** Browsers block local file access (`file:///`) for modern web apps. You must use a local server or the GitHub Pages URL.
-
----
-
-## 🛠️ Browser Support
-
-- ✅ **OBS Browser Source** - Primary target, fully supported.
-- ✅ **Chrome** - Recommended for testing and development.
-- ⚠️ **Firefox/Safari** - Should work, but optimized for Chromium-based rendering.
-
----
-
 ## 📜 Usage Terms
 
-**© 2025 Melty. All Rights Reserved.**
+**© 2026 Melty. All Rights Reserved.**
 
 This is for **personal use only**!
 
@@ -106,11 +87,11 @@ This is for **personal use only**!
 
 ## 💝 Show Me Your Garden!
 
-I LOVE seeing people use this project! If you grow a massive garden on your stream:
+I LOVE seeing people use my projects! If you grow a massive garden on your stream:
 
 **Take a screenshot and share it!**
 
-Seriousy - I put a lot of love into this project and nothing makes me happier than seeing people enjoy it! 🩷✨
+Seriousy - I put a lot of love into all of my projects and nothing makes me happier than seeing people enjoy them! 💗
 
 ### Where to Find Me
 
