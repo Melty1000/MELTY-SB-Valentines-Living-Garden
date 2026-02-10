@@ -52,7 +52,7 @@ class LivingGarden {
     EventBus.on(GardenEvents.CHEER, (data: any) => {
       const flower = this.garden.getFlowerManager().getFlower(data.userId);
       if (flower) {
-        this.particleManager.emitSparkles(flower.x, flower.y, 40);
+        this.particleManager.emitPetals(flower.x, flower.y, 40, [flower.getColor()]);
       }
     });
   }

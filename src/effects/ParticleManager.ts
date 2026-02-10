@@ -32,17 +32,19 @@ export class ParticleManager extends Container {
     const { on } = this.tracker;
 
     on(GardenEvents.FLOWER_GROW, (data: { flower: Flower; stage: FlowerStage, interaction?: boolean }) => {
+      const palette = [data.flower.getColor()];
+
       if (data.interaction && data.stage === FlowerStage.Radiant) {
-        this.emitSparkles(data.flower.x, data.flower.y, 5);
+        this.emitPetals(data.flower.x, data.flower.y, 5, palette);
         return;
       }
 
       if (data.stage === FlowerStage.Radiant) {
-        this.emitSparkles(data.flower.x, data.flower.y, 50);
+        this.emitPetals(data.flower.x, data.flower.y, 50, palette);
       } else if (data.stage === FlowerStage.FullBloom || data.stage === FlowerStage.MegaBloom) {
-        this.emitSparkles(data.flower.x, data.flower.y, 30);
+        this.emitPetals(data.flower.x, data.flower.y, 30, palette);
       } else if (data.stage === FlowerStage.Blooming) {
-        this.emitSparkles(data.flower.x, data.flower.y, 15);
+        this.emitPetals(data.flower.x, data.flower.y, 15, palette);
       }
     });
 
@@ -60,7 +62,7 @@ export class ParticleManager extends Container {
 
     on<CheerEventData>(GardenEvents.CHEER, (data) => {
       const intensity = Math.min(data.bits / 100, 5);
-      this.emitSparkles(
+      this.emitPetals(
         Math.random() * window.innerWidth,
         Math.random() * window.innerHeight * 0.5,
         Math.floor(20 * intensity)

@@ -107,6 +107,7 @@ export class Flower {
   }
 
   get stage(): FlowerStage { return this._stage; }
+  public getColor(): number { return this.color; }
 
   setStage(stage: FlowerStage): void {
     if (stage > this._stage) {
