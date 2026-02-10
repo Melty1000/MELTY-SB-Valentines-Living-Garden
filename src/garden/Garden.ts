@@ -67,8 +67,12 @@ export class Garden extends Container {
     });
 
     EventBus.on(GardenEvents.STREAM_OFFLINE, () => {
-      console.log('[Garden] Stream offline event received. Persisting state.');
-      // PersistenceManager.clear(); // DISABLED: Keep garden alive even if stream is offline
+      console.log('[Garden] Stream offline event received. Resetting garden state.');
+      this.flowerManager.clear();
+      this.setGrowth(config.vine.defaultGrowth);
+      PersistenceManager.clear();
+      // Optional: reload page to ensure clean slate?
+      // window.location.reload(); 
     });
   }
 
