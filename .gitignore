@@ -1,5 +1,19 @@
-node_modules
+node_modules/
 .DS_Store
 .env
-dist
-.DS_Store
+
+# Build artifacts
+dist/
+docs/
+
+# Test artifacts
+test-results/
+playwright-report/
+
+# Local-only tooling you do not want in this repo
+.github/
+tests/
+e2e/
+vitest.config.ts
+playwright.config.ts
+eslint.config.js
