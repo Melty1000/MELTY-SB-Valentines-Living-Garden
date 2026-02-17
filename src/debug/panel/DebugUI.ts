@@ -285,6 +285,7 @@ export class DebugUI {
                     archiveRemovedFlowers: false,
                     clearArchivedFlowers: true,
                     clearIgnoredUsers: true,
+                    rotateStreamSeed: true,
                 });
                 this.options.garden?.setGrowth(config.vine.defaultGrowth);
                 PersistenceManager.clear();

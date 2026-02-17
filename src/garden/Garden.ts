@@ -78,6 +78,7 @@ export class Garden extends Container {
         archiveRemovedFlowers: false,
         clearArchivedFlowers: true,
         clearIgnoredUsers: true,
+        rotateStreamSeed: true,
       });
       this.setGrowth(config.vine.defaultGrowth);
       PersistenceManager.clear();

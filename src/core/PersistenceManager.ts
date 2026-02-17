@@ -10,6 +10,7 @@ export interface GardenState {
     hearts: PersistentEntity[];
     growth: number;
     crownColor?: number; // Added: Persistent crown color
+    streamSeed?: number; // Added: Seed salt for per-stream procedural variation
     archivedFlowers?: PersistentEntity[]; // Added: Flowers preserved after pruning
     ignoredUsers?: string[]; // Added: Banned/Hidden users
 }
@@ -24,7 +25,8 @@ export class PersistenceManager {
                 hearts: state.hearts.length,
                 archived: state.archivedFlowers?.length || 0,
                 growth: state.growth.toFixed(3),
-                crownColor: state.crownColor ? state.crownColor.toString(16) : 'default'
+                crownColor: state.crownColor ? state.crownColor.toString(16) : 'default',
+                streamSeed: state.streamSeed
             });
             localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         } catch (e) {
@@ -45,7 +47,8 @@ export class PersistenceManager {
                 hearts: state.hearts?.length,
                 archived: state.archivedFlowers?.length,
                 ignored: state.ignoredUsers?.length,
-                crownColor: state.crownColor
+                crownColor: state.crownColor,
+                streamSeed: state.streamSeed
             });
             return state;
         } catch (e) {
@@ -61,6 +64,7 @@ export class PersistenceManager {
         try {
             const current = this.load();
             const preservedColor = current?.crownColor;
+            const nextStreamSeed = Math.floor(Date.now() + Math.random() * 1_000_000);
 
             localStorage.removeItem(STORAGE_KEY);
 
@@ -73,7 +77,8 @@ export class PersistenceManager {
                     archivedFlowers: [],
                     ignoredUsers: [],
                     growth: 0.05, // Reset to default minimum
-                    crownColor: preservedColor
+                    crownColor: preservedColor,
+                    streamSeed: nextStreamSeed
                 });
             } else {
                 console.log('[PersistenceManager] State wiped completely (No crown color to preserve)');

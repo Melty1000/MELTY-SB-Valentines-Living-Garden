@@ -66,6 +66,66 @@ You can test the garden and tweak visual settings using the built-in Debug Panel
 
 ---
 
+## 📴 Local/Offline Version
+
+Want to run this without an internet connection or modify the code?
+
+### How to Run Locally
+
+1. **Download the Source Code** via the green "Code" button > "Download ZIP".
+2. Extract the files to a folder.
+3. Open a terminal in the folder and run:
+   ```bash
+   npm install
+   npm run dev
+   ```
+4. Use the local URL (usually `http://localhost:5173`) in OBS.
+
+> **Note:** Browsers block local file access (`file:///`) for modern web apps. You must use a local server or the GitHub Pages URL.
+
+### Development Quality Gates
+
+```bash
+npm run typecheck
+npm run lint
+npm run test
+npm run test:e2e
+npm run build
+npm run check
+```
+
+`npm run check` runs all required release checks in order.
+
+### Debug Controls In Production Builds
+
+Debug globals and the F9 debug panel are now disabled by default in production builds.
+To explicitly enable them in production:
+
+```bash
+VITE_ENABLE_DEBUG_UI=true npm run build
+```
+
+### Runtime Config (Optional Env Vars)
+
+These are optional. If omitted, safe defaults are used.
+
+- `VITE_STREAMERBOT_HOST` default: `127.0.0.1`
+- `VITE_STREAMERBOT_PORT` default: `8080` (must be `1-65535`)
+- `VITE_STREAMERBOT_ENDPOINT` default: `/`
+- `VITE_STREAMERBOT_BROADCASTER_NAME` default: `Melty1000`
+- `VITE_MAX_FPS` default: `60` (must be `1-240`)
+- `VITE_ENABLE_DEBUG_UI` default: `true` in dev, `false` in production
+
+---
+
+## 🛠️ Browser Support
+
+- ✅ **OBS Browser Source** - Primary target, fully supported.
+- ✅ **Chrome** - Recommended for testing and development.
+- ⚠️ **Firefox/Safari** - Should work, but optimized for Chromium-based rendering.
+
+---
+
 ## 📜 Usage Terms
 
 **© 2026 Melty. All Rights Reserved.**

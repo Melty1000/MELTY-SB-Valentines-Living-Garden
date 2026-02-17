@@ -79,9 +79,7 @@ export const GardenEvents = {
   CHEER: 'garden:cheer',
   COMMAND: 'garden:command',
   RAID: 'garden:raid',
-  FLOWER_SPAWN: 'garden:flowerSpawn',
   FLOWER_GROW: 'garden:flowerGrow',
-  HEART_SPAWN: 'garden:heartSpawn',
   PETAL_SPAWN: 'garden:petalSpawn',
   PETAL_RAIN: 'garden:petalRain', // New: Falling petals
   VINE_GROWTH: 'garden:vineGrowth', // New: Decoupled sync

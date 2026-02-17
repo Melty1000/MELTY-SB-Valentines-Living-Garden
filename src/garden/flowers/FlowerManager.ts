@@ -24,6 +24,7 @@ export class FlowerManager extends Container {
   private archivedFlowers: Map<string, PersistentEntity> = new Map(); // Stored data for pruned users
   private ignoredUsers: Set<string> = new Set();
   private entityRenderMap: Map<string, FlowerRenderState> = new Map();
+  private streamSeed: number = this.generateStreamSeed();
 
   private vine: Vine;
   private renderer: any = null;
@@ -37,6 +38,10 @@ export class FlowerManager extends Container {
   private proceduralLayer: Container;
 
   private tracker = EventBus.createTracker();
+
+  private generateStreamSeed(): number {
+    return Math.floor(Date.now() + Math.random() * 1_000_000);
+  }
 
   constructor(vine: Vine) {
     super();
@@ -226,8 +231,28 @@ export class FlowerManager extends Container {
       );
     }
 
+    // Never shrink below the furthest active attachment point.
+    // This prevents visible entities from drifting off a hidden vine segment.
+    growthTarget = Math.max(growthTarget, this.getAttachmentGrowthFloor());
+
     // console.log(`[FlowerManager] Growth Update: Entities=${flowerCount}, Target=${growthTarget.toFixed(3)}`);
     EventBus.emit(GardenEvents.VINE_GROWTH, growthTarget);
+  }
+
+  private getAttachmentGrowthFloor(): number {
+    if (this.occupiedPoints.length === 0) {
+      return config.vine.defaultGrowth;
+    }
+
+    let requiredGrowth = config.vine.defaultGrowth;
+    for (const point of this.occupiedPoints) {
+      const pointGrowth = Math.abs(point.t - 0.5) * 2;
+      if (pointGrowth > requiredGrowth) {
+        requiredGrowth = pointGrowth;
+      }
+    }
+
+    return Math.min(config.vine.maxGrowth, requiredGrowth);
   }
 
   private spawnFlower(data: ChatterEventData, forcedPoint?: { t: number, strandIdx: number }): Flower | null {
@@ -237,7 +262,7 @@ export class FlowerManager extends Container {
 
     const twitchColor = parseTwitchColor(data.color);
     const color = twitchColor !== null ? twitchColor : userIdToColor(data.userId);
-    const seed = stringToSeed(data.userId);
+    const seed = stringToSeed(`${this.streamSeed}:${data.userId}`);
 
     const flower = new Flower(
       {
@@ -565,16 +590,17 @@ export class FlowerManager extends Container {
     }
 
     if (toRemove.length > 0) {
-      toRemove.forEach(uid => this.removeFlower(uid, { save: false }));
+      toRemove.forEach(uid => this.removeFlower(uid, { save: false, updateGrowth: false }));
+      this.updateVineGrowth();
       this.saveState();
     }
   }
 
   public removeFlower(
     userId: string,
-    options: { archive?: boolean; save?: boolean } = {}
+    options: { archive?: boolean; save?: boolean; updateGrowth?: boolean } = {}
   ): void {
-    const { archive = true, save = true } = options;
+    const { archive = true, save = true, updateGrowth = true } = options;
     const flower = this.flowers.get(userId);
     if (flower) {
       if (archive) {
@@ -608,6 +634,9 @@ export class FlowerManager extends Container {
 
       flower.destroy();
       this.flowers.delete(userId);
+      if (updateGrowth) {
+        this.updateVineGrowth();
+      }
       if (save) {
         this.saveState();
       }
@@ -629,15 +658,17 @@ export class FlowerManager extends Container {
     archiveRemovedFlowers?: boolean;
     clearArchivedFlowers?: boolean;
     clearIgnoredUsers?: boolean;
+    rotateStreamSeed?: boolean;
   } = {}): void {
     const {
       archiveRemovedFlowers = true,
       clearArchivedFlowers = false,
       clearIgnoredUsers = false,
+      rotateStreamSeed = false,
     } = options;
 
     for (const userId of Array.from(this.flowers.keys())) {
-      this.removeFlower(userId, { archive: archiveRemovedFlowers, save: false });
+      this.removeFlower(userId, { archive: archiveRemovedFlowers, save: false, updateGrowth: false });
     }
     for (const heart of this.hearts.values()) {
       heart.destroy();
@@ -650,8 +681,12 @@ export class FlowerManager extends Container {
     if (clearIgnoredUsers) {
       this.ignoredUsers.clear();
     }
+    if (rotateStreamSeed) {
+      this.streamSeed = this.generateStreamSeed();
+    }
     this.occupiedPoints = []; // CRITICAL: Reset spacing tracking
     this.vine.resetAttachmentPoints();
+    this.updateVineGrowth();
     this.saveState();
   }
 
@@ -677,12 +712,17 @@ export class FlowerManager extends Container {
       archivedFlowers: Array.from(this.archivedFlowers.values()),
       ignoredUsers: Array.from(this.ignoredUsers),
       growth: this.vine.getGrowth(),
-      crownColor: this.vine.getCrownColor()
+      crownColor: this.vine.getCrownColor(),
+      streamSeed: this.streamSeed,
     });
   }
 
   public restoreState(state: any): void {
     console.log('[FlowerManager] Restoring state...', state);
+
+    if (typeof state.streamSeed === 'number' && Number.isFinite(state.streamSeed)) {
+      this.streamSeed = state.streamSeed;
+    }
 
     // Restore Crown Color if present
     if (state.crownColor !== undefined) {
@@ -726,6 +766,8 @@ export class FlowerManager extends Container {
         this.spawnHeart(h.data, forcedPoint);
       });
     }
+
+    this.updateVineGrowth();
   }
 
   destroy(): void {

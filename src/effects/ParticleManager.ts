@@ -48,10 +48,6 @@ export class ParticleManager extends Container {
       }
     });
 
-    on(GardenEvents.HEART_SPAWN, (data: { heart: { x: number; y: number }, count?: number, palette?: number[] }) => {
-      this.emitHearts(data.heart.x, data.heart.y, data.count || 15, data.palette);
-    });
-
     on(GardenEvents.PETAL_SPAWN, (data: { x: number; y: number, count?: number, palette?: number[] }) => {
       this.emitPetals(data.x, data.y, data.count || 10, data.palette);
     });

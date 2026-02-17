@@ -46,6 +46,13 @@ export interface CheerEventData {
   message: string;
 }
 
+export interface RaidEventData {
+  userId: string;
+  userName: string;
+  displayName: string;
+  viewers: number;
+}
+
 export interface CommandEventData {
   userId: string;
   userName: string;
@@ -60,6 +67,7 @@ export type GardenEventType =
   | 'giftBomb'
   | 'follow'
   | 'cheer'
+  | 'raid'
   | 'command';
 
 export interface GardenEvent<T = unknown> {
