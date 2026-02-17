@@ -9,11 +9,16 @@ import { DanceEffect } from './effects/DanceEffect';
 import { CommandHandler } from './commands/CommandHandler';
 import { DebugUI } from './debug/panel/DebugUI';
 import { setupDebugControls } from './debug/DebugControls';
+import { FlowerCache } from './garden/flowers/FlowerCache';
 import { config } from './config';
 
-// Expose critical globals to window immediately for console access
-(window as any).EventBus = EventBus;
-(window as any).GardenEvents = GardenEvents;
+const debugEnabled = config.debug.enableUI;
+
+if (debugEnabled) {
+  // Expose debug globals to window for console access.
+  (window as any).EventBus = EventBus;
+  (window as any).GardenEvents = GardenEvents;
+}
 
 class LivingGarden {
   private app: Application;
@@ -23,7 +28,7 @@ class LivingGarden {
   private windSway!: WindSway;
   private danceEffect!: DanceEffect;
   private commandHandler!: CommandHandler;
-  private debugUI!: DebugUI;
+  private debugUI: DebugUI | null = null;
 
   constructor() {
     this.app = new Application();
@@ -90,25 +95,26 @@ class LivingGarden {
       this.update(ticker.deltaMS * 0.001);
     });
 
-    // Extracting debug setup to dedicated module
-    setupDebugControls({
-      garden: this.garden,
-      particleManager: this.particleManager,
-      windSway: this.windSway,
-      app: this.app
-    });
+    if (debugEnabled) {
+      setupDebugControls({
+        garden: this.garden,
+        particleManager: this.particleManager,
+        windSway: this.windSway,
+        app: this.app
+      });
 
-    // Initialize comprehensive Debug UI (F9 to toggle)
-    this.debugUI = new DebugUI({
-      garden: this.garden,
-      particleManager: this.particleManager,
-      windSway: this.windSway,
-      danceEffect: this.danceEffect,
-      streamerbotClient: this.streamerbotClient,
-      ticker: this.app.ticker,
-    });
-    // Expose for console access
-    (window as any).debugUI = this.debugUI;
+      // Initialize comprehensive Debug UI (F9 to toggle)
+      this.debugUI = new DebugUI({
+        garden: this.garden,
+        particleManager: this.particleManager,
+        windSway: this.windSway,
+        danceEffect: this.danceEffect,
+        streamerbotClient: this.streamerbotClient,
+        ticker: this.app.ticker,
+      });
+      // Expose for console access
+      (window as any).debugUI = this.debugUI;
+    }
 
     try {
       await this.streamerbotClient.connect();
@@ -141,18 +147,32 @@ class LivingGarden {
     this.commandHandler.destroy();
     this.danceEffect.destroy();
     this.particleManager.destroy();
+    this.debugUI?.destroy();
+    this.debugUI = null;
     this.garden.destroy();
+    FlowerCache.clear();
     assetLoader.destroy();
     this.app.destroy();
     EventBus.clear();
+
+    if (debugEnabled) {
+      delete (window as any).debugUI;
+      delete (window as any).gardenDebug;
+      delete (window as any).garden;
+      delete (window as any).clearGardenState;
+      delete (window as any).EventBus;
+      delete (window as any).GardenEvents;
+    }
   }
 }
 
 const livingGarden = new LivingGarden();
 livingGarden.init().catch(console.error);
 
-// Expose to window for console control (e.g. window.garden.vine.setGrowth(0.5))
-(window as any).garden = livingGarden;
+if (debugEnabled) {
+  // Expose to window for console control (e.g. window.garden.vine.setGrowth(0.5))
+  (window as any).garden = livingGarden;
+}
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {

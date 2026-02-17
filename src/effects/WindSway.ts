@@ -25,8 +25,9 @@ export class WindSway {
     // Only gusts will cause synchronized motion (on raids/subs)
     this.baseOffset = 0;
 
-    // Occasional gentle gusts
-    if (!this.gustActive && Math.random() < config.wind.gustChance) {
+    // Scale automatic gust frequency based on debug base speed control.
+    const gustChance = Math.max(0, this.baseSpeed) * config.wind.gustChance;
+    if (!this.gustActive && Math.random() < gustChance) {
       this.startGust(time);
     }
 

@@ -29,6 +29,7 @@ export class FlowerManager extends Container {
   private renderer: any = null;
   private occupiedPoints: AttachmentPoint[] = [];
   private lastPruneTime: number = 0; // Throttle forced pruning
+  private lastPeriodicPruneBucket: number = -1;
 
   // High-performance layers
   private mainLayer: Container;
@@ -495,11 +496,15 @@ export class FlowerManager extends Container {
       heart.update(deltaTime, windOffset);
     }
 
-    // 3. The Reaper: Check for inactive flowers every 30 minutes (1800s)
-    // Primary pruning is now done on-demand when new chatters arrive.
-    // Ensure we don't run this immediately on startup (wait 60s)
-    if (time > 60 && Math.floor(time) % 1800 === 0 && this.flowers.size > 20) {
-      this.reapZombies(time);
+    // 3. The Reaper: periodic fallback prune check.
+    // Run at most once per interval bucket to avoid multi-frame bursts.
+    if (time > 60 && this.flowers.size > 20) {
+      const pruneIntervalSeconds = 1800;
+      const bucket = Math.floor(time / pruneIntervalSeconds);
+      if (bucket > this.lastPeriodicPruneBucket) {
+        this.lastPeriodicPruneBucket = bucket;
+        this.reapZombies(time);
+      }
     }
   }
 
@@ -560,21 +565,27 @@ export class FlowerManager extends Container {
     }
 
     if (toRemove.length > 0) {
-      toRemove.forEach(uid => this.removeFlower(uid));
+      toRemove.forEach(uid => this.removeFlower(uid, { save: false }));
+      this.saveState();
     }
   }
 
-  public removeFlower(userId: string): void {
+  public removeFlower(
+    userId: string,
+    options: { archive?: boolean; save?: boolean } = {}
+  ): void {
+    const { archive = true, save = true } = options;
     const flower = this.flowers.get(userId);
     if (flower) {
-      // ARCHIVE DATA BEFORE DELETION
-      // Store the exact state so we can restore it later
-      this.archivedFlowers.set(userId, {
-        userId,
-        data: flower.data,
-        attachT: flower.attachT,
-        strandIdx: flower.strandIdx
-      });
+      if (archive) {
+        // Store exact state so we can restore it later.
+        this.archivedFlowers.set(userId, {
+          userId,
+          data: flower.data,
+          attachT: flower.attachT,
+          strandIdx: flower.strandIdx
+        });
+      }
 
       // Remove from occupancy list
       this.occupiedPoints = this.occupiedPoints.filter(p => p.t !== flower.attachT || p.strandIdx !== flower.strandIdx);
@@ -597,7 +608,9 @@ export class FlowerManager extends Container {
 
       flower.destroy();
       this.flowers.delete(userId);
-      this.saveState();
+      if (save) {
+        this.saveState();
+      }
     }
   }
 
@@ -612,15 +625,31 @@ export class FlowerManager extends Container {
     }
   }
 
-  clear(): void {
-    for (const userId of this.flowers.keys()) {
-      this.removeFlower(userId);
+  clear(options: {
+    archiveRemovedFlowers?: boolean;
+    clearArchivedFlowers?: boolean;
+    clearIgnoredUsers?: boolean;
+  } = {}): void {
+    const {
+      archiveRemovedFlowers = true,
+      clearArchivedFlowers = false,
+      clearIgnoredUsers = false,
+    } = options;
+
+    for (const userId of Array.from(this.flowers.keys())) {
+      this.removeFlower(userId, { archive: archiveRemovedFlowers, save: false });
     }
     for (const heart of this.hearts.values()) {
       heart.destroy();
       this.removeChild(heart);
     }
     this.hearts.clear();
+    if (clearArchivedFlowers) {
+      this.archivedFlowers.clear();
+    }
+    if (clearIgnoredUsers) {
+      this.ignoredUsers.clear();
+    }
     this.occupiedPoints = []; // CRITICAL: Reset spacing tracking
     this.vine.resetAttachmentPoints();
     this.saveState();

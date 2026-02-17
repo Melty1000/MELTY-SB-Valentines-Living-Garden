@@ -272,6 +272,7 @@ export class VineRenderer {
         this.twigContainer.destroy();
         this.frontTwigContainer.destroy();
 
+        FoliageCache.clear();
         TendrilCache.clear();
     }
 }

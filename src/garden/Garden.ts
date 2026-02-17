@@ -6,6 +6,8 @@ import type { GiftBombEventData } from '../connection/types';
 import { config } from '../config';
 import { PersistenceManager } from '../core/PersistenceManager';
 
+const debugEnabled = config.debug.enableUI;
+
 export class Garden extends Container {
   private frontVine: Vine;
   private backVine: Vine;
@@ -72,7 +74,11 @@ export class Garden extends Container {
 
     EventBus.on(GardenEvents.STREAM_OFFLINE, () => {
       console.log('[Garden] Stream offline event received. Resetting garden state.');
-      this.flowerManager.clear();
+      this.flowerManager.clear({
+        archiveRemovedFlowers: false,
+        clearArchivedFlowers: true,
+        clearIgnoredUsers: true,
+      });
       this.setGrowth(config.vine.defaultGrowth);
       PersistenceManager.clear();
       // Optional: reload page to ensure clean slate?
@@ -90,11 +96,13 @@ export class Garden extends Container {
       this.flowerManager.restoreState(state);
     }
 
-    // Expose a way to clear state if it's corrupted
-    (window as any).clearGardenState = () => {
-      PersistenceManager.clear();
-      window.location.reload();
-    };
+    if (debugEnabled) {
+      // Expose a way to clear state if it's corrupted
+      (window as any).clearGardenState = () => {
+        PersistenceManager.clear();
+        window.location.reload();
+      };
+    }
   }
 
   public resize(width: number, height: number): void {

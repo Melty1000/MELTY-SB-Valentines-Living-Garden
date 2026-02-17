@@ -121,8 +121,8 @@ export class VineStrandMesh {
         }
 
         // PRE-SCAN: Find first and last valid points for fallback positions
-        let firstValidX = 0, firstValidY = 0;
-        let lastValidX = 0, lastValidY = 0;
+        let firstValidX = 0;
+        let firstValidY = 0;
         for (let i = 0; i < points.length; i++) {
             const pt = points[i];
             if (pt && pt.t !== -1) {
@@ -131,8 +131,8 @@ export class VineStrandMesh {
                 break;
             }
         }
-        lastValidX = firstValidX;
-        lastValidY = firstValidY;
+        let lastValidX = firstValidX;
+        let lastValidY = firstValidY;
 
         // Recalculate positions with tapering
         for (let i = 0; i < points.length; i++) {
@@ -151,8 +151,6 @@ export class VineStrandMesh {
             const t = pt.t;
 
             const halfThickness = this.baseThickness * 0.5;
-            let taperFactor = 1.0;
-
             // Fading Taper Logic:
             // At growth=1.0: Full taper strength (standard shape)
             // At growth=3.2: Zero taper strength (rectangular profile / full thickness)
@@ -160,7 +158,7 @@ export class VineStrandMesh {
             const maxTaperGrowth = 3.2;
             const taperStrength = Math.max(0, Math.min(1, (maxTaperGrowth - growth) / (maxTaperGrowth - 1.0)));
 
-            let distFromCenter = Math.abs(t - 0.5);
+            const distFromCenter = Math.abs(t - 0.5);
             const effectiveGrowth = Math.max(0.01, growth);
 
             // Calculate raw taper based on current growth
@@ -169,7 +167,7 @@ export class VineStrandMesh {
 
             // Mix raw taper with 1.0 (full thickness) based on taperStrength
             // Strength 1.0 = Use Raw Taper. Strength 0.0 = Use 1.0.
-            taperFactor = rawTaper + (1.0 - rawTaper) * (1.0 - taperStrength);
+            const taperFactor = rawTaper + (1.0 - rawTaper) * (1.0 - taperStrength);
 
             const thickness = Math.max(0.3, halfThickness * taperFactor);
 

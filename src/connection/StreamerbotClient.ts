@@ -14,31 +14,69 @@ export class StreamerbotClient {
   private broadcasterName: string | null = null;
   private broadcasterId: string | null = null;
   private isClientConnected: boolean = false;
+  private isConnecting: boolean = false;
+  private hasSubscribedEvents: boolean = false;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(config: StreamerbotConfig) {
     this.config = config;
     this.eventMapper = new EventMapper();
   }
 
+  private createClient(): SBClient {
+    return new SBClient({
+      host: this.config.host,
+      port: this.config.port,
+      endpoint: this.config.endpoint,
+      immediate: false,
+      autoReconnect: true,
+      retries: this.maxReconnectAttempts,
+      onConnect: () => this.onConnect(),
+      onDisconnect: () => this.onDisconnect(),
+      onError: (error) => this.onError(error),
+    });
+  }
+
+  private clearReconnectTimer(): void {
+    if (this.reconnectTimer !== null) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+  }
+
   async connect(): Promise<void> {
+    if (this.isClientConnected || this.isConnecting) {
+      return;
+    }
+
+    this.clearReconnectTimer();
+    this.isConnecting = true;
+
     try {
-      this.client = new SBClient({
-        host: this.config.host,
-        port: this.config.port,
-        endpoint: this.config.endpoint,
-        immediate: false,
-        autoReconnect: true,
-        retries: this.maxReconnectAttempts,
-        onConnect: () => this.onConnect(),
-        onDisconnect: () => this.onDisconnect(),
-        onError: (error) => this.onError(error),
-      });
+      if (!this.client) {
+        this.client = this.createClient();
+        this.hasSubscribedEvents = false;
+      }
 
       await this.client.connect();
-      this.subscribeToEvents();
+      if (!this.hasSubscribedEvents) {
+        this.subscribeToEvents();
+        this.hasSubscribedEvents = true;
+      }
     } catch (error) {
       console.error('[StreamerbotClient] Connection failed:', error);
+      if (this.client) {
+        try {
+          this.client.disconnect();
+        } catch {
+          // Ignore cleanup failures and continue reconnect flow.
+        }
+      }
+      this.client = null;
+      this.hasSubscribedEvents = false;
       this.scheduleReconnect();
+    } finally {
+      this.isConnecting = false;
     }
   }
 
@@ -226,6 +264,8 @@ export class StreamerbotClient {
 
   private async onConnect(): Promise<void> {
     console.log('[StreamerbotClient] Connected to Streamerbot endpoint');
+    this.clearReconnectTimer();
+    this.isConnecting = false;
     this.isClientConnected = true;
     this.reconnectAttempts = 0;
     EventBus.emit(GardenEvents.CONNECTED);
@@ -253,7 +293,7 @@ export class StreamerbotClient {
               console.log(`[StreamerbotClient] Broadcaster identified: ${this.broadcasterName} (${this.broadcasterId})`);
             }
           }
-        } catch (bcErr) {
+        } catch {
           console.warn('[StreamerbotClient] GetBroadcaster request failed');
         }
 
@@ -280,6 +320,7 @@ export class StreamerbotClient {
 
   private onDisconnect(): void {
     console.log('[StreamerbotClient] Disconnected from Streamerbot');
+    this.isConnecting = false;
     this.isClientConnected = false;
     EventBus.emit(GardenEvents.DISCONNECTED);
   }
@@ -290,17 +331,25 @@ export class StreamerbotClient {
   }
 
   private scheduleReconnect(): void {
+    if (this.isClientConnected || this.isConnecting) return;
     if (this.reconnectAttempts >= this.maxReconnectAttempts) return;
+    if (this.reconnectTimer !== null) return;
     this.reconnectAttempts++;
     const delay = this.reconnectDelay * this.reconnectAttempts;
-    setTimeout(() => this.connect(), delay);
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.connect();
+    }, delay);
   }
 
   disconnect(): void {
+    this.clearReconnectTimer();
+    this.isConnecting = false;
     if (this.client) {
       this.client.disconnect();
       this.client = null;
     }
+    this.hasSubscribedEvents = false;
     this.isClientConnected = false;
   }
 
@@ -325,7 +374,7 @@ export class StreamerbotClient {
         }));
       }
       return [];
-    } catch (error) {
+    } catch {
       // Suppress annoying warning if not supported
       // console.warn('[StreamerbotClient] GetViewers request failed:', error);
       return [];

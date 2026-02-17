@@ -34,6 +34,9 @@ export const DEBUG_STYLES = `
   #debug-ui .panel-content.hidden {
     display: none;
   }
+  #debug-ui .panel.collapsed > :not(h2) {
+    display: none;
+  }
   #debug-ui button {
     background: #3b82f6;
     color: white;

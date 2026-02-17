@@ -22,6 +22,12 @@ export class DebugUI {
     private frameCount: number = 0;
     private lastFpsUpdate: number = 0;
     private activeTimeouts: number[] = [];
+    private statusRefreshTimeout: number | null = null;
+    private readonly onKeyDown = (e: KeyboardEvent): void => {
+        if (e.key === 'F9') {
+            this.toggle();
+        }
+    };
 
     constructor(options: DebugUIOptions) {
         this.options = options;
@@ -69,11 +75,7 @@ export class DebugUI {
 
     private setupListeners(): void {
         // F9 Toggle
-        window.addEventListener('keydown', (e) => {
-            if (e.key === 'F9') {
-                this.toggle();
-            }
-        });
+        window.addEventListener('keydown', this.onKeyDown);
 
         // Button actions
         this.container.addEventListener('click', (e) => {
@@ -81,15 +83,11 @@ export class DebugUI {
 
             // Handle collapsible panels
             if (target.tagName === 'H2') {
-                const content = target.nextElementSibling as HTMLElement;
-                if (content && content.classList.contains('panel-content') || true) {
-                    // We'll use a more generic way since titles are clickable
-                    const panelContent = target.parentElement?.querySelector('.panel-content') || target.nextElementSibling;
-                    if (panelContent && (panelContent as HTMLElement).classList) {
-                        (panelContent as HTMLElement).classList.toggle('hidden');
-                        target.classList.toggle('collapsed');
-                        this.savePanelStates();
-                    }
+                const panel = target.closest('.panel');
+                if (panel) {
+                    panel.classList.toggle('collapsed');
+                    target.classList.toggle('collapsed');
+                    this.savePanelStates();
                 }
                 return;
             }
@@ -148,9 +146,7 @@ export class DebugUI {
                 checkbox.addEventListener('change', () => {
                     const checked = checkbox.checked;
                     if (id === 'toggle-particles') {
-                        if (this.options.garden.getParticleManager()) {
-                            this.options.garden.getParticleManager().visible = checked;
-                        }
+                        if (this.options.particleManager) this.options.particleManager.visible = checked;
                     } else if (id === 'toggle-crown') {
                         const crown = this.options.garden.getVine()?.getCrownFlower();
                         if (crown) crown.visible = checked;
@@ -178,11 +174,12 @@ export class DebugUI {
             this.container.querySelectorAll('h2').forEach((h2, i) => {
                 if (states[`panel_${i}`]) {
                     h2.classList.add('collapsed');
-                    const content = h2.parentElement?.querySelector('.panel-content') || h2.nextElementSibling;
-                    if (content) (content as HTMLElement).classList.add('hidden');
+                    h2.closest('.panel')?.classList.add('collapsed');
                 }
             });
-        } catch (e) { }
+        } catch {
+            // Ignore malformed persisted panel state.
+        }
     }
 
     public show(): void {
@@ -274,6 +271,7 @@ export class DebugUI {
             case 'close': this.hide(); break;
             case 'refresh-status': this.updateStatus(); break;
             case 'reconnect':
+                this.options.streamerbotClient?.disconnect();
                 this.options.streamerbotClient?.connect();
                 this.updateStatus();
                 break;
@@ -281,9 +279,13 @@ export class DebugUI {
                 this.options.streamerbotClient?.disconnect();
                 this.updateStatus();
                 break;
-            case 'hard-reset':
+            case 'hard-reset': {
                 console.log('[DebugUI] Hard Reset triggered directly.');
-                this.options.garden?.getFlowerManager()?.clear();
+                this.options.garden?.getFlowerManager()?.clear({
+                    archiveRemovedFlowers: false,
+                    clearArchivedFlowers: true,
+                    clearIgnoredUsers: true,
+                });
                 this.options.garden?.setGrowth(config.vine.defaultGrowth);
                 PersistenceManager.clear();
                 this.updateStatus();
@@ -295,6 +297,7 @@ export class DebugUI {
                     setTimeout(() => btn.innerText = originalText, 1000);
                 }
                 break;
+            }
 
             // Flowers
             case 'spawn-flower':
@@ -315,13 +318,14 @@ export class DebugUI {
                     tier: '1000',
                 });
                 break;
-            case 'bulk-spawn':
+            case 'bulk-spawn': {
                 const count = getNum('bulk-count', 10);
                 console.log(`[DebugUI] Spawning ${count} flowers...`);
                 for (let i = 0; i < count; i++) {
                     setTimeout(() => this.handleAction('spawn-flower'), i * 50);
                 }
                 break;
+            }
             case 'clear-flowers':
                 this.options.garden?.getFlowerManager()?.clear();
                 this.activeTimeouts.forEach(t => clearTimeout(t));
@@ -374,11 +378,12 @@ export class DebugUI {
             case 'gentle-breeze': this.options.windSway?.forceGust(performance.now() * 0.001, 0.5); break;
             case 'strong-gust': this.options.windSway?.forceGust(performance.now() * 0.001, 2.5); break;
             case 'hurricane': this.options.windSway?.forceGust(performance.now() * 0.001, 5.0); break;
-            case 'toggle-wind':
+            case 'toggle-wind': {
                 const speed = parseFloat(getVal('wind-speed'));
                 this.options.windSway?.setBaseSpeed(speed > 0 ? 0 : 1);
                 (this.container.querySelector('#wind-speed') as HTMLInputElement).value = speed > 0 ? '0' : '1';
                 break;
+            }
 
             // Events
             case 'event-chatter':
@@ -404,6 +409,9 @@ export class DebugUI {
                     userName: 'NewFollower',
                     displayName: 'NewFollower',
                 });
+                break;
+            case 'event-channel-points':
+                console.warn('[DebugUI] Channel points simulation is not implemented.');
                 break;
             case 'event-gift-bomb':
                 EventBus.emit(GardenEvents.GIFT_BOMB, {
@@ -457,10 +465,11 @@ export class DebugUI {
                     updateActiveGrid('set-crown-type', value);
                 }
                 break;
-            case 'toggle-crown':
+            case 'toggle-crown': {
                 const crown = this.options.garden?.getVine()?.getCrownFlower?.();
                 if (crown) crown.visible = !crown.visible;
                 break;
+            }
 
             // Commands
             case 'cmd-wiggle': EventBus.emit(GardenEvents.COMMAND, { command: 'wiggle' }); break;
@@ -471,16 +480,18 @@ export class DebugUI {
             case 'cmd-sparkle': EventBus.emit(GardenEvents.COMMAND, { command: 'sparkle' }); break;
             case 'cmd-dance': EventBus.emit(GardenEvents.COMMAND, { command: 'dance' }); break;
             case 'cmd-grow': EventBus.emit(GardenEvents.COMMAND, { command: 'grow' }); break;
-            case 'run-custom-command':
+            case 'run-custom-command': {
                 const customCmd = (this.container.querySelector('#custom-command') as HTMLInputElement)?.value;
                 if (customCmd) EventBus.emit(GardenEvents.COMMAND, { command: customCmd });
                 break;
+            }
 
             // Display
-            case 'apply-scale':
+            case 'apply-scale': {
                 const scale = getNum('global-scale', 1);
                 this.options.garden.scale.set(scale);
                 break;
+            }
 
             // Stress
             case 'stress-flowers':
@@ -535,11 +546,27 @@ export class DebugUI {
                 console.log(`[DebugUI] Unknown action: ${action}`);
         }
 
-        // Refresh status
-        setTimeout(() => this.updateStatus(), 100);
+        this.queueStatusUpdate();
+    }
+
+    private queueStatusUpdate(): void {
+        if (this.statusRefreshTimeout !== null) {
+            clearTimeout(this.statusRefreshTimeout);
+        }
+        this.statusRefreshTimeout = window.setTimeout(() => {
+            this.statusRefreshTimeout = null;
+            this.updateStatus();
+        }, 100);
     }
 
     destroy(): void {
+        window.removeEventListener('keydown', this.onKeyDown);
+        this.activeTimeouts.forEach(t => clearTimeout(t));
+        this.activeTimeouts = [];
+        if (this.statusRefreshTimeout !== null) {
+            clearTimeout(this.statusRefreshTimeout);
+            this.statusRefreshTimeout = null;
+        }
         this.container.remove();
     }
 }

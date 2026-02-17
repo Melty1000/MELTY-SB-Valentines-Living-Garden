@@ -115,7 +115,6 @@ export function generateDebugHTML(): string {
       <div class="btn-row">
         <button data-action="event-raid" class="warning">Raid</button>
         <button data-action="event-follow" class="success">Follow</button>
-        <button data-action="event-channel-points">Channel Points</button>
       </div>
       <label>
         Raid Viewers: <input type="number" id="raid-viewers" value="50" min="1" max="10000">
@@ -260,8 +259,6 @@ export function generateDebugHTML(): string {
         <code style="background: #0f172a; padding: 8px; border-radius: 4px; font-size: 11px; cursor: pointer;" title="Click to copy" data-copy="gardenDebug.forceGust(3)">gardenDebug.forceGust(3)</code>
         <code style="background: #0f172a; padding: 8px; border-radius: 4px; font-size: 11px; cursor: pointer;" title="Click to copy" data-copy="EventBus.emit(GardenEvents.RAID, { viewers: 100 })">EventBus.emit(GardenEvents.RAID, { viewers: 100 })</code>
         <code style="background: #0f172a; padding: 8px; border-radius: 4px; font-size: 11px; cursor: pointer;" title="Click to copy" data-copy="EventBus.emit(GardenEvents.GIFT_BOMB, { count: 10 })">EventBus.emit(GardenEvents.GIFT_BOMB, { count: 10 })</code>
-      </div>
-    </div>
       </div>
     </div>
   `;
