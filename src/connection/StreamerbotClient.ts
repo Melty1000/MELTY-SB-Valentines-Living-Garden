@@ -145,6 +145,10 @@ export class StreamerbotClient {
 
     switch (type) {
       case 'chatMessage': {
+        if (!this.isChatMessageForConfiguredChannel(data)) {
+          return;
+        }
+
         const lowerConfigName = (this.config.broadcasterName || '').toLowerCase();
         const lowerBroadcasterName = (this.broadcasterName || '').toLowerCase();
         const lowerIdentityName = identity.userName.toLowerCase();
@@ -260,6 +264,108 @@ export class StreamerbotClient {
         EventBus.emit(GardenEvents.STREAM_OFFLINE);
         break;
     }
+  }
+
+  private isChatMessageForConfiguredChannel(raw: any): boolean {
+    const channel = this.extractChannelIdentity(raw);
+    const channelId = channel.id?.trim();
+    const channelName = channel.name?.trim().toLowerCase();
+
+    // If the payload does not expose channel origin, keep legacy behavior.
+    if (!channelId && !channelName) {
+      return true;
+    }
+
+    const knownBroadcasterId = this.broadcasterId?.trim();
+    const knownNames = new Set<string>();
+    if (this.broadcasterName) knownNames.add(this.broadcasterName.trim().toLowerCase());
+    if (this.config.broadcasterName) knownNames.add(this.config.broadcasterName.trim().toLowerCase());
+
+    if (channelId && knownBroadcasterId && channelId !== knownBroadcasterId) {
+      console.log(`[StreamerbotClient] Ignoring shared chat message from channelId=${channelId}`);
+      return false;
+    }
+
+    if (channelName && knownNames.size > 0 && !knownNames.has(channelName)) {
+      console.log(`[StreamerbotClient] Ignoring shared chat message from channel=${channelName}`);
+      return false;
+    }
+
+    return true;
+  }
+
+  private extractChannelIdentity(raw: any): { id?: string; name?: string } {
+    const msg = raw?.message || raw?.data?.message || {};
+    const broadcaster =
+      msg?.broadcaster ||
+      raw?.broadcaster ||
+      raw?.channel ||
+      raw?.room ||
+      raw?.data?.broadcaster ||
+      raw?.data?.channel ||
+      raw?.data?.room ||
+      {};
+
+    const id = String(
+      raw?.broadcasterUserId ??
+      raw?.broadcaster_user_id ??
+      raw?.broadcastUserId ??
+      raw?.channelId ??
+      raw?.channel_id ??
+      raw?.roomId ??
+      raw?.room_id ??
+      raw?.data?.broadcasterUserId ??
+      raw?.data?.broadcaster_user_id ??
+      raw?.data?.broadcastUserId ??
+      raw?.data?.channelId ??
+      raw?.data?.channel_id ??
+      raw?.data?.roomId ??
+      raw?.data?.room_id ??
+      msg?.broadcasterUserId ??
+      msg?.broadcaster_user_id ??
+      msg?.channelId ??
+      msg?.channel_id ??
+      msg?.roomId ??
+      msg?.room_id ??
+      broadcaster?.id ??
+      broadcaster?.userId ??
+      broadcaster?.user_id ??
+      ''
+    );
+
+    const name = String(
+      raw?.broadcasterUserName ??
+      raw?.broadcaster_user_name ??
+      raw?.broadcastUser ??
+      raw?.broadcastUserName ??
+      raw?.channelName ??
+      raw?.channel_name ??
+      raw?.roomName ??
+      raw?.room_name ??
+      raw?.data?.broadcasterUserName ??
+      raw?.data?.broadcaster_user_name ??
+      raw?.data?.broadcastUser ??
+      raw?.data?.broadcastUserName ??
+      raw?.data?.channelName ??
+      raw?.data?.channel_name ??
+      raw?.data?.roomName ??
+      raw?.data?.room_name ??
+      msg?.broadcasterUserName ??
+      msg?.broadcaster_user_name ??
+      msg?.channelName ??
+      msg?.channel_name ??
+      msg?.roomName ??
+      msg?.room_name ??
+      broadcaster?.login ??
+      broadcaster?.name ??
+      broadcaster?.displayName ??
+      ''
+    );
+
+    return {
+      id: id || undefined,
+      name: name || undefined,
+    };
   }
 
   private async onConnect(): Promise<void> {
