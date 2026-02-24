@@ -52,6 +52,18 @@ export class Garden extends Container {
     this.flowerManager.setStreamerbotClient(client);
   }
 
+  private resetForStreamBoundary(source: 'online' | 'offline'): void {
+    console.log(`[Garden] Stream ${source} event received. Resetting garden state.`);
+    this.flowerManager.clear({
+      archiveRemovedFlowers: false,
+      clearArchivedFlowers: true,
+      clearIgnoredUsers: true,
+      rotateStreamSeed: true,
+    });
+    this.setGrowth(config.vine.defaultGrowth);
+    PersistenceManager.clear();
+  }
+
   private setupEventListeners(): void {
     EventBus.on('app:resize', (data: { width: number; height: number }) => {
       this.resize(data.width, data.height);
@@ -72,18 +84,14 @@ export class Garden extends Container {
       this.setGrowth(value);
     });
 
+    EventBus.on(GardenEvents.STREAM_ONLINE, () => {
+      this.resetForStreamBoundary('online');
+    });
+
     EventBus.on(GardenEvents.STREAM_OFFLINE, () => {
-      console.log('[Garden] Stream offline event received. Resetting garden state.');
-      this.flowerManager.clear({
-        archiveRemovedFlowers: false,
-        clearArchivedFlowers: true,
-        clearIgnoredUsers: true,
-        rotateStreamSeed: true,
-      });
-      this.setGrowth(config.vine.defaultGrowth);
-      PersistenceManager.clear();
+      this.resetForStreamBoundary('offline');
       // Optional: reload page to ensure clean slate?
-      // window.location.reload(); 
+      // window.location.reload();
     });
   }
 

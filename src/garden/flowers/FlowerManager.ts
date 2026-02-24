@@ -38,6 +38,8 @@ export class FlowerManager extends Container {
   private proceduralLayer: Container;
 
   private tracker = EventBus.createTracker();
+  private pendingSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly saveDebounceMs = 250;
 
   private generateStreamSeed(): number {
     return Math.floor(Date.now() + Math.random() * 1_000_000);
@@ -161,6 +163,7 @@ export class FlowerManager extends Container {
     if (flower) {
       const oldStage = flower.stage;
       flower.data.messageCount += (data.messageCount || 1);
+      flower.touch();
 
       // Actual growth trigger!
       flower.updateFromMessageCount(flower.data.messageCount, config.milestones);
@@ -208,7 +211,7 @@ export class FlowerManager extends Container {
       }
     }
 
-    this.saveState();
+    this.queueSaveState();
   }
 
   private updateVineGrowth(extraCount: number = 0): void {
@@ -547,14 +550,14 @@ export class FlowerManager extends Container {
     }
     this.lastPruneTime = now;
 
-    const toRemove: string[] = [];
+    const toRemove = new Set<string>();
 
     // 1. Time-based fallback (Safety net) - Only run this on the long interval
     if (!force) {
       for (const [userId, flower] of this.flowers.entries()) {
         if (now - flower.getLastInteraction() > timeout) {
           console.log(`[FlowerManager] Pruning timed-out user (Fallback): ${flower.data.userName}`);
-          toRemove.push(userId);
+          toRemove.add(userId);
         }
       }
     }
@@ -572,15 +575,16 @@ export class FlowerManager extends Container {
 
           // Check every flower owner
           for (const [userId, flower] of this.flowers.entries()) {
-            // Skip if already marked for time-out
-            if (toRemove.includes(userId)) continue;
-
             const isPresent = currentViewerIds.has(userId) || currentViewerNames.has(flower.data.userName.toLowerCase());
 
-            // Strict Pruning: If they aren't here, they go to the archive. No strikes.
-            if (!isPresent) {
+            // Presence check is authoritative when we have a valid viewer list.
+            // This prevents false removals from stale fallback timeout state.
+            if (isPresent) {
+              toRemove.delete(userId);
+            } else {
+              // Strict Pruning: If they aren't here, they go to the archive. No strikes.
               console.log(`[FlowerManager] Pruning absent user (Moving to Archive): ${flower.data.userName} (${userId})`);
-              toRemove.push(userId);
+              toRemove.add(userId);
             }
           }
         }
@@ -589,7 +593,7 @@ export class FlowerManager extends Container {
       }
     }
 
-    if (toRemove.length > 0) {
+    if (toRemove.size > 0) {
       toRemove.forEach(uid => this.removeFlower(uid, { save: false, updateGrowth: false }));
       this.updateVineGrowth();
       this.saveState();
@@ -690,7 +694,33 @@ export class FlowerManager extends Container {
     this.saveState();
   }
 
+  private queueSaveState(): void {
+    if (this.pendingSaveTimer !== null) {
+      return;
+    }
+
+    this.pendingSaveTimer = setTimeout(() => {
+      this.pendingSaveTimer = null;
+      this.saveState();
+    }, this.saveDebounceMs);
+  }
+
+  private flushQueuedSave(): void {
+    if (this.pendingSaveTimer === null) {
+      return;
+    }
+
+    clearTimeout(this.pendingSaveTimer);
+    this.pendingSaveTimer = null;
+    this.saveState();
+  }
+
   public saveState(): void {
+    if (this.pendingSaveTimer !== null) {
+      clearTimeout(this.pendingSaveTimer);
+      this.pendingSaveTimer = null;
+    }
+
     const flowers = Array.from(this.flowers.entries()).map(([userId, f]) => ({
       userId,
       data: f.data,
@@ -771,6 +801,7 @@ export class FlowerManager extends Container {
   }
 
   destroy(): void {
+    this.flushQueuedSave();
     this.tracker.unsubscribeAll();
     this.flowers.forEach(f => f.destroy());
     this.hearts.forEach(h => h.destroy());

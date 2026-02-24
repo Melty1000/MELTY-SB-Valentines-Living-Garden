@@ -119,6 +119,10 @@ export class StreamerbotClient {
       this.handleRawEvent('streamOffline', data);
     });
 
+    this.client.on('Twitch.StreamOnline', (data) => {
+      this.handleRawEvent('streamOnline', data);
+    });
+
     this.client.on('General.Custom', (data) => {
       this.eventMapper.mapStreamerbotEvent(data);
     });
@@ -262,6 +266,10 @@ export class StreamerbotClient {
 
       case 'streamOffline':
         EventBus.emit(GardenEvents.STREAM_OFFLINE);
+        break;
+
+      case 'streamOnline':
+        EventBus.emit(GardenEvents.STREAM_ONLINE);
         break;
     }
   }

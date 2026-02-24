@@ -143,6 +143,7 @@ export class Petals extends Container {
         p.active = false;
         p.sprite.visible = false;
         this.particles.splice(i, 1);
+        this.pool.push(p);
         continue;
       }
 
@@ -177,6 +178,7 @@ export class Petals extends Container {
     for (const p of this.particles) {
       p.active = false;
       p.sprite.visible = false;
+      this.pool.push(p);
     }
     this.particles = [];
   }

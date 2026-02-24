@@ -13,8 +13,9 @@ import { FlowerCache } from './garden/flowers/FlowerCache';
 import { config } from './config';
 
 const debugEnabled = config.debug.enableUI;
+const debugGlobalsEnabled = debugEnabled && config.debug.enableGlobals;
 
-if (debugEnabled) {
+if (debugGlobalsEnabled) {
   // Expose debug globals to window for console access.
   (window as any).EventBus = EventBus;
   (window as any).GardenEvents = GardenEvents;
@@ -96,12 +97,14 @@ class LivingGarden {
     });
 
     if (debugEnabled) {
-      setupDebugControls({
-        garden: this.garden,
-        particleManager: this.particleManager,
-        windSway: this.windSway,
-        app: this.app
-      });
+      if (debugGlobalsEnabled) {
+        setupDebugControls({
+          garden: this.garden,
+          particleManager: this.particleManager,
+          windSway: this.windSway,
+          app: this.app
+        });
+      }
 
       // Initialize comprehensive Debug UI (F9 to toggle)
       this.debugUI = new DebugUI({
@@ -112,8 +115,10 @@ class LivingGarden {
         streamerbotClient: this.streamerbotClient,
         ticker: this.app.ticker,
       });
-      // Expose for console access
-      (window as any).debugUI = this.debugUI;
+      if (debugGlobalsEnabled) {
+        // Expose for console access
+        (window as any).debugUI = this.debugUI;
+      }
     }
 
     try {
@@ -155,7 +160,7 @@ class LivingGarden {
     this.app.destroy();
     EventBus.clear();
 
-    if (debugEnabled) {
+    if (debugGlobalsEnabled) {
       delete (window as any).debugUI;
       delete (window as any).gardenDebug;
       delete (window as any).garden;
@@ -169,7 +174,7 @@ class LivingGarden {
 const livingGarden = new LivingGarden();
 livingGarden.init().catch(console.error);
 
-if (debugEnabled) {
+if (debugGlobalsEnabled) {
   // Expose to window for console control (e.g. window.garden.vine.setGrowth(0.5))
   (window as any).garden = livingGarden;
 }

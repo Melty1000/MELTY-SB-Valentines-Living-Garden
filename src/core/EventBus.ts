@@ -87,6 +87,7 @@ export const GardenEvents = {
   DANCE_END: 'garden:danceEnd',
   WIND_CHANGE: 'garden:windChange',
   BROADCASTER_COLOR: 'garden:broadcasterColor',
+  STREAM_ONLINE: 'garden:streamOnline',
   STREAM_OFFLINE: 'garden:streamOffline', // New: Clear persistence
   CONNECTED: 'connection:connected',
   DISCONNECTED: 'connection:disconnected',

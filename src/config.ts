@@ -53,6 +53,7 @@ const streamerbotBroadcasterName = readEnvString('VITE_STREAMERBOT_BROADCASTER_N
 
 const maxFPS = readEnvNumber('VITE_MAX_FPS', 60, { min: 1, max: 240 });
 const enableDebugUI = readEnvBoolean('VITE_ENABLE_DEBUG_UI', import.meta.env.DEV);
+const enableDebugGlobals = readEnvBoolean('VITE_ENABLE_DEBUG_GLOBALS', import.meta.env.DEV);
 
 export const config = {
   streamerbot: {
@@ -64,6 +65,7 @@ export const config = {
 
   debug: {
     enableUI: enableDebugUI,
+    enableGlobals: enableDebugGlobals,
   },
 
   maxFPS,

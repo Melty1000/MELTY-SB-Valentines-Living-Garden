@@ -98,11 +98,18 @@ npm run check
 
 ### Debug Controls In Production Builds
 
-Debug globals and the F9 debug panel are now disabled by default in production builds.
-To explicitly enable them in production:
+The F9 debug panel is disabled by default in production builds.
+To explicitly enable the panel in production:
 
 ```bash
 VITE_ENABLE_DEBUG_UI=true npm run build
+```
+
+Window debug globals are now controlled separately for security hardening.
+To enable globals like `window.garden`/`window.gardenDebug` in production too:
+
+```bash
+VITE_ENABLE_DEBUG_UI=true VITE_ENABLE_DEBUG_GLOBALS=true npm run build
 ```
 
 ### Runtime Config (Optional Env Vars)
@@ -115,6 +122,7 @@ These are optional. If omitted, safe defaults are used.
 - `VITE_STREAMERBOT_BROADCASTER_NAME` default: `Melty1000`
 - `VITE_MAX_FPS` default: `60` (must be `1-240`)
 - `VITE_ENABLE_DEBUG_UI` default: `true` in dev, `false` in production
+- `VITE_ENABLE_DEBUG_GLOBALS` default: `true` in dev, `false` in production
 
 ---
 
