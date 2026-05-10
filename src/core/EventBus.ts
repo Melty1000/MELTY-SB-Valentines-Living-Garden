@@ -52,21 +52,6 @@ class EventBusClass {
   clear(): void {
     this.listeners.clear();
   }
-
-  createTracker(): { on: EventBusClass['on']; unsubscribeAll: () => void } {
-    const subs: EventSubscription[] = [];
-    return {
-      on: <T = unknown>(event: string, callback: EventCallback<T>) => {
-        const sub = this.on(event, callback);
-        subs.push(sub);
-        return sub;
-      },
-      unsubscribeAll: () => {
-        subs.forEach((s) => s.unsubscribe());
-        subs.length = 0;
-      },
-    };
-  }
 }
 
 export const EventBus = new EventBusClass();
@@ -78,17 +63,12 @@ export const GardenEvents = {
   FOLLOW: 'garden:follow',
   CHEER: 'garden:cheer',
   COMMAND: 'garden:command',
-  RAID: 'garden:raid',
+  FLOWER_SPAWN: 'garden:flowerSpawn',
   FLOWER_GROW: 'garden:flowerGrow',
-  PETAL_SPAWN: 'garden:petalSpawn',
-  PETAL_RAIN: 'garden:petalRain', // New: Falling petals
-  VINE_GROWTH: 'garden:vineGrowth', // New: Decoupled sync
+  HEART_SPAWN: 'garden:heartSpawn',
   DANCE_START: 'garden:danceStart',
   DANCE_END: 'garden:danceEnd',
   WIND_CHANGE: 'garden:windChange',
-  BROADCASTER_COLOR: 'garden:broadcasterColor',
-  STREAM_ONLINE: 'garden:streamOnline',
-  STREAM_OFFLINE: 'garden:streamOffline', // New: Clear persistence
   CONNECTED: 'connection:connected',
   DISCONNECTED: 'connection:disconnected',
   ERROR: 'connection:error',

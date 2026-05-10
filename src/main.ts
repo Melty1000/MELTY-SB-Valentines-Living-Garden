@@ -7,19 +7,7 @@ import { ParticleManager } from './effects/ParticleManager';
 import { WindSway } from './effects/WindSway';
 import { DanceEffect } from './effects/DanceEffect';
 import { CommandHandler } from './commands/CommandHandler';
-import { DebugUI } from './debug/panel/DebugUI';
-import { setupDebugControls } from './debug/DebugControls';
-import { FlowerCache } from './garden/flowers/FlowerCache';
 import { config } from './config';
-
-const debugEnabled = config.debug.enableUI;
-const debugGlobalsEnabled = debugEnabled && config.debug.enableGlobals;
-
-if (debugGlobalsEnabled) {
-  // Expose debug globals to window for console access.
-  (window as any).EventBus = EventBus;
-  (window as any).GardenEvents = GardenEvents;
-}
 
 class LivingGarden {
   private app: Application;
@@ -29,7 +17,6 @@ class LivingGarden {
   private windSway!: WindSway;
   private danceEffect!: DanceEffect;
   private commandHandler!: CommandHandler;
-  private debugUI: DebugUI | null = null;
 
   constructor() {
     this.app = new Application();
@@ -37,29 +24,6 @@ class LivingGarden {
       host: config.streamerbot.host,
       port: config.streamerbot.port,
       endpoint: config.streamerbot.endpoint,
-    });
-    this.setupEventListeners();
-  }
-
-  private setupEventListeners(): void {
-    EventBus.on(GardenEvents.RAID, (data: any) => {
-      console.log(`[LivingGarden] Raid received! Viewers: ${data.viewers}`);
-      this.windSway.forceGust(performance.now() * 0.001, 2.5);
-      // Trigger heavy petal rain (100 particles)
-      this.particleManager.emitPetalRain(100);
-    });
-
-    EventBus.on(GardenEvents.SUBSCRIPTION, (data: any) => {
-      console.log(`[LivingGarden] Subscription received from ${data.displayName}`);
-      this.windSway.forceGust(performance.now() * 0.001, 1.8);
-      this.particleManager.emitPetals(Math.random() * window.innerWidth, 0, 20);
-    });
-
-    EventBus.on(GardenEvents.CHEER, (data: any) => {
-      const flower = this.garden.getFlowerManager().getFlower(data.userId);
-      if (flower) {
-        this.particleManager.emitPetals(flower.x, flower.y, 40, [flower.getColor()]);
-      }
     });
   }
 
@@ -70,16 +34,14 @@ class LivingGarden {
     }
 
     await this.app.init(container);
-    this.app.ticker.maxFPS = config.maxFPS;
 
     assetLoader.setRenderer(this.app.renderer);
     await assetLoader.loadAssets();
 
-    console.log(`[LivingGarden] Initializing Garden with dimensions: ${this.app.width}x${this.app.height}`);
-    this.garden = new Garden(this.app.width, this.app.height, this.app.renderer);
+    this.garden = new Garden(this.app.width, this.app.height);
     this.app.addChild(this.garden);
 
-    this.particleManager = new ParticleManager(this.app.renderer);
+    this.particleManager = new ParticleManager();
     this.app.addChild(this.particleManager);
 
     this.windSway = new WindSway();
@@ -93,33 +55,11 @@ class LivingGarden {
     );
 
     this.app.ticker.add((ticker) => {
-      this.update(ticker.deltaMS * 0.001);
+      const deltaTime = ticker.deltaMS;
+      this.update(deltaTime);
     });
 
-    if (debugEnabled) {
-      if (debugGlobalsEnabled) {
-        setupDebugControls({
-          garden: this.garden,
-          particleManager: this.particleManager,
-          windSway: this.windSway,
-          app: this.app
-        });
-      }
-
-      // Initialize comprehensive Debug UI (F9 to toggle)
-      this.debugUI = new DebugUI({
-        garden: this.garden,
-        particleManager: this.particleManager,
-        windSway: this.windSway,
-        danceEffect: this.danceEffect,
-        streamerbotClient: this.streamerbotClient,
-        ticker: this.app.ticker,
-      });
-      if (debugGlobalsEnabled) {
-        // Expose for console access
-        (window as any).debugUI = this.debugUI;
-      }
-    }
+    this.setupDebugControls();
 
     try {
       await this.streamerbotClient.connect();
@@ -128,23 +68,96 @@ class LivingGarden {
       console.log('[LivingGarden] Running in standalone mode');
     }
 
-    // Inject client into Garden for presence pruning
-    this.garden.setStreamerbotClient(this.streamerbotClient);
-
     console.log('[LivingGarden] Initialized successfully');
   }
 
   private update(deltaTime: number): void {
-    const time = performance.now() * 0.001;
-    this.windSway.update(time);
-    this.garden.update(time, deltaTime);
+    this.windSway.update(deltaTime);
+    this.garden.update(deltaTime);
     this.particleManager.update(deltaTime);
     this.danceEffect.update(deltaTime);
-    if (this.debugUI) this.debugUI.update();
   }
 
-  public getGarden(): Garden {
-    return this.garden;
+  private setupDebugControls(): void {
+    const debug = {
+      spawnTestFlower: () => {
+        const testId = `test_${Date.now()}`;
+        EventBus.emit(GardenEvents.CHATTER, {
+          userId: testId,
+          userName: `TestUser${Math.floor(Math.random() * 1000)}`,
+          displayName: `TestUser${Math.floor(Math.random() * 1000)}`,
+          messageCount: Math.floor(Math.random() * 50) + 1,
+          milestones: config.milestones,
+        });
+      },
+
+      spawnTestHeart: () => {
+        const testId = `heart_${Date.now()}`;
+        EventBus.emit(GardenEvents.SUBSCRIPTION, {
+          userId: testId,
+          userName: `SubUser${Math.floor(Math.random() * 1000)}`,
+          displayName: `SubUser${Math.floor(Math.random() * 1000)}`,
+          tier: ['1000', '2000', '3000'][Math.floor(Math.random() * 3)] as '1000' | '2000' | '3000',
+          isGift: false,
+        });
+      },
+
+      triggerGiftBomb: () => {
+        EventBus.emit(GardenEvents.GIFT_BOMB, {
+          userId: `gifter_${Date.now()}`,
+          userName: 'GenerousGifter',
+          displayName: 'GenerousGifter',
+          count: 10,
+          tier: '1000',
+        });
+      },
+
+      triggerCommand: (command: string, args: string[] = []) => {
+        EventBus.emit(GardenEvents.COMMAND, {
+          userId: 'debug_user',
+          userName: 'DebugUser',
+          displayName: 'DebugUser',
+          command,
+          args,
+        });
+      },
+
+      emitSparkles: (x?: number, y?: number) => {
+        this.particleManager.emitSparkles(
+          x ?? this.app.width / 2,
+          y ?? this.app.height / 2,
+          30
+        );
+      },
+
+      emitHearts: (x?: number, y?: number) => {
+        this.particleManager.emitHearts(
+          x ?? this.app.width / 2,
+          y ?? this.app.height / 2,
+          15
+        );
+      },
+
+      forceGust: (intensity = 1) => {
+        this.windSway.forceGust(intensity);
+      },
+
+      startDance: () => {
+        this.garden.startDance();
+      },
+    };
+
+    (window as unknown as { gardenDebug: typeof debug }).gardenDebug = debug;
+
+    console.log('[LivingGarden] Debug controls available via window.gardenDebug');
+    console.log('  gardenDebug.spawnTestFlower()');
+    console.log('  gardenDebug.spawnTestHeart()');
+    console.log('  gardenDebug.triggerGiftBomb()');
+    console.log('  gardenDebug.triggerCommand("wiggle")');
+    console.log('  gardenDebug.emitSparkles(x, y)');
+    console.log('  gardenDebug.emitHearts(x, y)');
+    console.log('  gardenDebug.forceGust(intensity)');
+    console.log('  gardenDebug.startDance()');
   }
 
   destroy(): void {
@@ -152,32 +165,15 @@ class LivingGarden {
     this.commandHandler.destroy();
     this.danceEffect.destroy();
     this.particleManager.destroy();
-    this.debugUI?.destroy();
-    this.debugUI = null;
     this.garden.destroy();
-    FlowerCache.clear();
     assetLoader.destroy();
     this.app.destroy();
     EventBus.clear();
-
-    if (debugGlobalsEnabled) {
-      delete (window as any).debugUI;
-      delete (window as any).gardenDebug;
-      delete (window as any).garden;
-      delete (window as any).clearGardenState;
-      delete (window as any).EventBus;
-      delete (window as any).GardenEvents;
-    }
   }
 }
 
 const livingGarden = new LivingGarden();
 livingGarden.init().catch(console.error);
-
-if (debugGlobalsEnabled) {
-  // Expose to window for console control (e.g. window.garden.vine.setGrowth(0.5))
-  (window as any).garden = livingGarden;
-}
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {

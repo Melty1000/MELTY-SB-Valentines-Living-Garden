@@ -1,4 +1,5 @@
 import { EventBus, GardenEvents } from '../core/EventBus';
+import { noise } from '../utils/math';
 import { config } from '../config';
 
 export class WindSway {
@@ -7,62 +8,45 @@ export class WindSway {
   private gustActive: boolean = false;
   private gustEndTime: number = 0;
   private gustTargetIntensity: number = 0;
-  private baseSpeed: number = 1;
+  private timeOffset: number;
 
   constructor() {
+    this.timeOffset = Math.random() * 1000;
   }
 
-  setBaseSpeed(speed: number): void {
-    this.baseSpeed = speed;
-  }
+  update(_deltaTime: number): number {
+    const time = performance.now() * 0.001 + this.timeOffset;
 
-  getBaseSpeed(): number {
-    return this.baseSpeed;
-  }
+    // Very subtle base movement - barely perceptible breathing
+    this.baseOffset = noise(time * config.wind.baseSpeed * 50, 0) * 5;
 
-  update(time: number): number {
-    // Base offset disabled - vine strands animate independently now
-    // Only gusts will cause synchronized motion (on raids/subs)
-    this.baseOffset = 0;
-
-    // Scale automatic gust frequency based on debug base speed control.
-    const gustChance = Math.max(0, this.baseSpeed) * config.wind.gustChance;
-    if (!this.gustActive && Math.random() < gustChance) {
-      this.startGust(time);
+    // Occasional gentle gusts
+    if (!this.gustActive && Math.random() < config.wind.gustChance) {
+      this.startGust();
     }
 
     if (this.gustActive) {
-      if (time >= this.gustEndTime) {
+      const now = performance.now();
+      if (now >= this.gustEndTime) {
         this.gustActive = false;
         this.gustOffset = 0;
       } else {
-        // Convert ms to seconds for consistency
-        const durationSeconds = (config.wind.gustDuration || 3000) / 1000;
-        const progress = 1 - (this.gustEndTime - time) / durationSeconds;
+        const progress = 1 - (this.gustEndTime - now) / config.wind.gustDuration;
         // Smooth ease in/out curve
-        const gustCurve = Math.sin(Math.max(0, Math.min(1, progress)) * Math.PI);
+        const gustCurve = Math.sin(progress * Math.PI);
         this.gustOffset = this.gustTargetIntensity * gustCurve * 8;
       }
     }
 
     const totalOffset = this.baseOffset + this.gustOffset;
-
-    // Safety check just in case
-    if (isNaN(totalOffset)) {
-      this.gustActive = false;
-      this.gustOffset = 0;
-      return this.baseOffset;
-    }
-
     EventBus.emit(GardenEvents.WIND_CHANGE, totalOffset);
+
     return totalOffset;
   }
 
-  private startGust(currentTime: number): void {
-    // Convert ms to seconds for consistency with time parameter
-    const durationSeconds = (config.wind.gustDuration || 3000) / 1000;
+  private startGust(): void {
     this.gustActive = true;
-    this.gustEndTime = currentTime + durationSeconds;
+    this.gustEndTime = performance.now() + config.wind.gustDuration;
     this.gustTargetIntensity = (Math.random() * 0.5 + 0.5) * config.wind.gustIntensity;
 
     // Random direction
@@ -71,11 +55,9 @@ export class WindSway {
     }
   }
 
-  forceGust(currentTime: number, intensity: number = 1): void {
-    // Convert ms to seconds for consistency with time parameter
-    const durationSeconds = (config.wind.gustDuration || 3000) / 1000;
+  forceGust(intensity: number = 1): void {
     this.gustActive = true;
-    this.gustEndTime = currentTime + durationSeconds;
+    this.gustEndTime = performance.now() + config.wind.gustDuration;
     this.gustTargetIntensity = intensity * config.wind.gustIntensity;
   }
 

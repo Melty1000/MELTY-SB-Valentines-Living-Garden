@@ -1,363 +1,394 @@
 import { Container, Graphics } from 'pixi.js';
-import { CrownFlower } from './flowers/CrownFlower';
-import { noise, lerp } from '../utils/math';
+import { VineBranch } from './VineBranch';
+import { CrownFlower } from './CrownFlower';
+import { noise } from '../utils/math';
+import { VineColors } from '../utils/colors';
+import { drawLeaf, drawTendril } from '../utils/procedural';
 import { config } from '../config';
-import {
-  StrandPoint,
-  AttachmentPoint
-} from './vine/VineTypes';
-import { VineSimulator } from './vine/VineSimulator';
-import { VineRenderer } from './vine/VineRenderer';
+
+interface VinePoint {
+  x: number;
+  y: number;
+  thickness: number;
+}
+
+interface VineLeaf {
+  t: number;  // Position along vine (0-1)
+  side: number;  // 1 or -1
+  angle: number;
+  size: number;
+  offset: number;  // For animation
+}
+
+interface VineTendril {
+  t: number;
+  side: number;
+  angle: number;
+  length: number;
+  curls: number;
+}
 
 export class Vine extends Container {
-  private simulator: VineSimulator;
-  private renderer: VineRenderer;
-  private crownFlower: CrownFlower;
   private graphics: Graphics;
-  private isBackground: boolean;
-  private growth: number = config.vine.defaultGrowth || 0.03;
-  private growthTarget: number = config.vine.defaultGrowth || 0.03;
+  private branches: VineBranch[] = [];
+  private crownFlower: CrownFlower;
+  private width_: number;
+  private height_: number;
   private timeOffset: number;
-  // Apex Predator Optimization (v6): Memory Pooling
-  // allocate once, reuse forever.
-  private strandPool: StrandPoint[][] = [[], []];
-  private lastCalculatedStrands: StrandPoint[][] = [[], []];
 
-  constructor(width: number, height: number, isBackground: boolean = false) {
+  // Store vine path points for branch attachment
+  private vinePoints: VinePoint[] = [];
+  private leaves: VineLeaf[] = [];
+  private tendrils: VineTendril[] = [];
+
+  constructor(width: number, height: number) {
     super();
-    this.isBackground = isBackground;
+    this.width_ = width;
+    this.height_ = height;
     this.timeOffset = Math.random() * 1000;
+
     this.graphics = new Graphics();
     this.addChild(this.graphics);
 
-    this.simulator = new VineSimulator(width, height, isBackground);
-    this.renderer = new VineRenderer(this.graphics, isBackground);
+    this.crownFlower = new CrownFlower('rose', 35);
+    this.addChild(this.crownFlower);
 
-    this.crownFlower = new CrownFlower('rose', 14);
-    if (!this.isBackground) {
-      this.addChild(this.crownFlower);
-    }
-
-    this.refresh();
-  }
-
-  public refresh(): void {
-    this.simulator.generateVinePath();
-    this.simulator.generateThorns();
-    this.simulator.generateFoliage();
-    this.simulator.attachmentPoints = [];
-    const steps = config.vine.attachmentSteps || 40;
-    const exclusion = config.vine.crownExclusionZone || 0.02;
-    for (let i = 0; i < steps; i++) {
-      const t = (i + 0.5) / steps;
-      if (Math.abs(t - 0.5) < exclusion) continue; // Exclude top crown area
-
-      this.simulator.attachmentPoints.push({ t, strandIdx: 0, occupied: false, slotIdx: i % 2 });
-      this.simulator.attachmentPoints.push({ t, strandIdx: 1, occupied: false, slotIdx: (i + 1) % 2 });
-    }
-    // Shuffle candidates but keep slotIdx intact for logic
-    this.simulator.attachmentPoints.sort(() => Math.random() - 0.5);
-
-    // Initialize Pool
-    this.ensurePoolSize(this.simulator.vinePoints.length);
-
+    this.generateVinePath();
+    this.generateLeaves();
+    this.generateTendrils();
+    this.generateBranches();
     this.draw(0);
   }
 
-  private ensurePoolSize(size: number): void {
-    for (let s = 0; s < 2; s++) {
-      while (this.strandPool[s].length < size) {
-        this.strandPool[s].push({ x: 0, y: 0, t: 0 });
+  private generateVinePath(): void {
+    this.vinePoints = [];
+
+    const margin = 0.03;
+    const topY = this.height_ * 0.06;
+    const bottomY = this.height_ * 0.97;
+    const leftX = this.width_ * margin;
+    const rightX = this.width_ * (1 - margin);
+
+    // Create smooth path: bottom-left -> up -> across top -> down -> bottom-right
+    const segments = 60;
+
+    for (let i = 0; i <= segments; i++) {
+      const t = i / segments;
+      let x: number, y: number, thickness: number;
+
+      if (t < 0.35) {
+        // Left side going up
+        const localT = t / 0.35;
+        x = leftX;
+        y = bottomY - (bottomY - topY - this.height_ * 0.08) * localT;
+        thickness = config.vine.thickness * (1 - localT * 0.15);
+      } else if (t < 0.65) {
+        // Across the top (arch)
+        const localT = (t - 0.35) / 0.3;
+        const archHeight = this.height_ * 0.02;
+
+        // Smooth curve across top
+        x = leftX + (rightX - leftX) * localT;
+        // Parabolic arch
+        const archT = localT * 2 - 1; // -1 to 1
+        y = topY + archHeight * (1 - archT * archT);
+        thickness = config.vine.thickness * 0.85;
+      } else {
+        // Right side going down
+        const localT = (t - 0.65) / 0.35;
+        x = rightX;
+        y = topY + this.height_ * 0.08 + (bottomY - topY - this.height_ * 0.08) * localT;
+        thickness = config.vine.thickness * (0.85 + localT * 0.15);
       }
+
+      this.vinePoints.push({ x, y, thickness });
     }
   }
 
-  public update(time: number, _deltaTime: number, windOffset: number = 0): void {
-    const strands = this.draw(time, windOffset);
+  private generateLeaves(): void {
+    this.leaves = [];
+    const leafCount = config.vine.leafCount;
 
-    if (!this.isBackground && strands[0].length > 0) {
-      const crown = this.getCrownPosition(time, windOffset);
-      this.crownFlower.position.set(crown.x, crown.y);
-      this.crownFlower.update(time, _deltaTime, windOffset);
-    }
+    for (let i = 0; i < leafCount; i++) {
+      const t = 0.05 + Math.random() * 0.9;
+      const side = Math.random() > 0.5 ? 1 : -1;
 
-    // Smooth growth lerping
-    if (Math.abs(this.growth - this.growthTarget) > 0.001) {
-      this.growth = lerp(this.growth, this.growthTarget, 0.05);
-    } else {
-      this.growth = this.growthTarget;
-    }
-  }
-
-  private draw(time: number, windOffset: number = 0): StrandPoint[][] {
-    const strands = this.calculateStrands(time, windOffset);
-
-    this.renderer.render({
-      strands,
-      leaves: this.simulator.leaves,
-      twigs: this.simulator.twigs,
-      thorns: this.simulator.thorns,
-      vinePoints: this.simulator.vinePoints,
-      growth: this.growth
-    });
-
-    this.lastCalculatedStrands = strands;
-    return strands;
-  }
-
-  private calculateStrands(time: number, windOffset: number): StrandPoint[][] {
-    // We return the pool directly. Consumers must NOT store references to the arrays,
-    // or they must copy them if they need persistence (which they don't).
-    const pts = this.simulator.vinePoints;
-    const amplitude = config.vine.helixAmplitude || 12;  // Independent strand separation
-
-    // Reuse these to avoid allocation inside the loop? 
-    // Actually map() creates new objects. Let's optimize normals too?
-    // Normals depend on geometry which is static until resize.
-    // They should be cached in VineSimulator, but for now let's just focus on strands.
-
-    // Quick normal calc without allocation (inline) to avoid the .map() overhead
-    // Or just accept the 1200 normal objects for now (they are small).
-    // Let's stick to the big wins first.
-
-    // Normals are now pre-calculated in VineSimulator (p.nx, p.ny)
-    // No allocation needed here!
-
-    for (let s = 0; s < 2; s++) {
-      const phaseOffset = s * Math.PI;
-      const pool = this.strandPool[s];
-
-      for (let i = 0; i < pts.length; i++) {
-        const p = pts[i];
-        const t = i / (pts.length - 1);
-
-        // Apex Predator: Write directly to pool
-        const pt = pool[i];
-
-        let distFromCenter = Math.abs(t - 0.5);
-        if (distFromCenter > 0.5) distFromCenter = 1.0 - distFromCenter;
-
-        // Culling: If too thin, we effectively "null" it logic-wise, 
-        // but for pooling we just set it to NaN or rely on the checked length?
-        // The original logic pushed "null".
-        // To keep pooling simple, we'll mark t as -1 to indicate invalid/culled.
-        if (distFromCenter > this.growth * 0.5) {
-          pt.t = -1; // Marker for "hidden"
-          continue;
-        }
-
-        // TAPER: Support Center-Out Growth (Top -> Bottom)
-        // Ensure strands connect at the "Growing Tips" (current growth edge)
-        // AND at the "Roots" (final destination)
-        const visibleLimit = this.growth * 0.5;
-        const distToEdge = visibleLimit - distFromCenter;
-        // Convert T-space to approx pixels for consistent 100px taper
-        const pxToEdge = distToEdge * this.simulator.totalLength;
-        const growthTaper = Math.max(0, Math.min(1, pxToEdge / 100));
-
-        // FORCED TIP CONNECTION: Ensure strands meet at t=0 and t=1 regardless of growth
-        // Taper over the first/last 5% of length
-        const endTaper = Math.min(1, Math.min(t, 1.0 - t) * 20);
-
-        // Combine growth taper (animation) with end taper (geometry)
-        const taper = growthTaper * endTaper;
-
-        // TIME-ANIMATED helix
-        // time is in SECONDS.
-        const helixTimeSpeed = 0.05; // Very slow helix rotation (~120s cycle)
-        // Remove 'p.warp' for clean sine wave
-        const animatedHelixAngle = this.simulator.getHelixAngle(p.len, phaseOffset, 0) + time * helixTimeSpeed;
-
-        const helixOffset = Math.sin(animatedHelixAngle) * (amplitude * taper);
-
-        // SYNCHRONIZED OPPOSITE MOTION
-        // time is in SECONDS
-        const swayFreq = 0.1;  // ~0.1 rad/s = ~60 second cycle (extremely gentle)
-        const timeAngle = time * swayFreq + p.len * 0.05;
-        const swayAmt = 4 * taper;     // Apply taper to sway too
-
-        // THE KEY: s=0 uses +sin, s=1 uses -sin (OPPOSITE direction)
-        const directionMultiplier = s === 0 ? 1 : -1;
-        const timeSwayX = Math.sin(timeAngle) * swayAmt * directionMultiplier;
-        const timeSwayY = Math.cos(timeAngle * 1.3) * (swayAmt * 0.4) * directionMultiplier;
-
-        // Use pre-calculated normal
-        const nx = p.nx;
-        const ny = p.ny;
-
-        // Wind only (global sway disabled)
-        const windX = windOffset * 0.3;
-
-        // Apply: base position + wind + OPPOSITE sway + helix
-        pt.x = p.x + windX + timeSwayX + nx * helixOffset;
-        pt.y = p.y + timeSwayY + ny * helixOffset;
-        pt.t = t;
+      // Determine angle based on position on vine
+      let baseAngle: number;
+      if (t < 0.35) {
+        // Left side - leaves point right/outward
+        baseAngle = side > 0 ? Math.PI * 0.1 : -Math.PI * 0.9;
+      } else if (t < 0.65) {
+        // Top - leaves point down
+        baseAngle = Math.PI * 0.5 + (Math.random() - 0.5) * 0.4;
+      } else {
+        // Right side - leaves point left/outward
+        baseAngle = side > 0 ? Math.PI * 0.9 : Math.PI * 0.1;
       }
+
+      this.leaves.push({
+        t,
+        side,
+        angle: baseAngle + (Math.random() - 0.5) * 0.3,
+        size: config.vine.leafSize * (0.6 + Math.random() * 0.4),
+        offset: Math.random() * 1000,
+      });
     }
-
-
-
-    return this.strandPool;
   }
 
-  public getCrownPosition(time: number, windOffset: number = 0): { x: number; y: number } {
-    const p = this.simulator.getPointAtT(0.5);
-    const speed = config.vine.swaySpeed || 0.0015;
-    // Fix: Use ?? to allow 0 (disabled)
-    const amt = config.vine.swayAmount ?? 25;
-    const swayX = noise(time * speed + this.timeOffset + p.len * 0.005, 1000.3) * amt + windOffset * 0.3;
-    const swayY = noise(time * (speed * 0.8) + this.timeOffset + p.len * 0.005, 1000.3) * (amt * 0.4);
-    return { x: p.x + swayX, y: p.y + swayY };
+  private generateTendrils(): void {
+    this.tendrils = [];
+    const tendrilCount = config.vine.tendrilCount;
+
+    for (let i = 0; i < tendrilCount; i++) {
+      const t = 0.1 + Math.random() * 0.8;
+      const side = Math.random() > 0.5 ? 1 : -1;
+
+      let baseAngle: number;
+      if (t < 0.35) {
+        baseAngle = side > 0 ? Math.PI * 0.2 : -Math.PI * 0.8;
+      } else if (t < 0.65) {
+        baseAngle = Math.PI * 0.5 + (Math.random() - 0.5) * 0.6;
+      } else {
+        baseAngle = side > 0 ? Math.PI * 0.8 : Math.PI * 0.2;
+      }
+
+      this.tendrils.push({
+        t,
+        side,
+        angle: baseAngle,
+        length: 15 + Math.random() * 20,
+        curls: 1.5 + Math.random() * 1.5,
+      });
+    }
   }
 
-  public getStrandPosition(t: number, strandIdx: number, time: number, windOffset: number = 0): StrandPoint | null {
-    const pts = this.simulator.vinePoints;
-    if (isNaN(t)) return null;
+  private generateBranches(): void {
+    for (const branch of this.branches) {
+      this.removeChild(branch);
+      branch.destroy();
+    }
+    this.branches = [];
 
-    const idx = Math.floor(t * (pts.length - 1));
-    if (isNaN(idx) || idx < 0 || idx >= pts.length) return null;
+    const branchesPerSide = config.vine.branchesPerSide;
 
-    // Apex Predator Optimization (v4):
-    // Use the last calculated strands if available to avoid redundant noise/helix math.
-    // v6: Check for pooled "t=-1" marker which means culled/null.
-    if (this.lastCalculatedStrands[strandIdx] && this.lastCalculatedStrands[strandIdx][idx]) {
-      const fastPt = this.lastCalculatedStrands[strandIdx][idx];
-      // Only return early if the point is actually valid in the pool.
-      // If t is -1, it's 'culled' in the pool (likely stale from last frame's growth).
-      // Fall through to recalculate manually for the current frame's growth.
-      if (fastPt.t !== -1) return fastPt;
+    // Left side branches
+    for (let i = 0; i < branchesPerSide; i++) {
+      const t = 0.08 + (i / branchesPerSide) * 0.27; // 0.08 to 0.35
+      const point = this.getPointAtT(t);
+
+      const branch = new VineBranch(
+        point.x,
+        point.y,
+        Math.PI * 0.15 + Math.random() * 0.2, // Point inward
+        config.vine.branchLength * (0.7 + Math.random() * 0.3)
+      );
+      branch.x = point.x;
+      branch.y = point.y;
+      this.branches.push(branch);
+      this.addChild(branch);
     }
 
-    const p = pts[idx];
-    const amplitude = config.vine.helixAmplitude ?? 12; // Fix: Allow 0
+    // Right side branches
+    for (let i = 0; i < branchesPerSide; i++) {
+      const t = 0.65 + (i / branchesPerSide) * 0.27; // 0.65 to 0.92
+      const point = this.getPointAtT(t);
 
-    // Reuse pre-calculated normal
-    const n = { dx: p.nx, dy: p.ny };
+      const branch = new VineBranch(
+        point.x,
+        point.y,
+        Math.PI * 0.85 - Math.random() * 0.2, // Point inward
+        config.vine.branchLength * (0.7 + Math.random() * 0.3)
+      );
+      branch.x = point.x;
+      branch.y = point.y;
+      this.branches.push(branch);
+      this.addChild(branch);
+    }
+  }
 
-    // TIME-ANIMATED helix (match calculateStrands)
-    // Reuse distFromCenter calculation for consistency
-    let distFromCenter = Math.abs(t - 0.5);
-    if (distFromCenter > 0.5) distFromCenter = 1.0 - distFromCenter;
+  private getPointAtT(t: number): VinePoint {
+    const index = Math.floor(t * (this.vinePoints.length - 1));
+    const nextIndex = Math.min(index + 1, this.vinePoints.length - 1);
+    const localT = (t * (this.vinePoints.length - 1)) - index;
 
-    // TAPER: Support Center-Out Growth (Top -> Bottom)
-    // Ensure strands connect at the "Growing Tips" (current growth edge)
-    // AND at the "Roots" (final destination)
-    const visibleLimit = this.growth * 0.5;
-    const distToEdge = visibleLimit - distFromCenter;
-    // Convert T-space to approx pixels for consistent 100px taper
-    const pxToEdge = distToEdge * this.simulator.totalLength;
-    const taper = Math.max(0, Math.min(1, pxToEdge / 100));
-
-    // TIME-ANIMATED helix
-    // time is in SECONDS.
-    const phaseOffset = strandIdx * Math.PI;
-    const helixTimeSpeed = 0.05; // Very slow helix rotation (~120s cycle)
-    // Remove 'p.warp' for clean sine wave
-    const animatedHelixAngle = this.simulator.getHelixAngle(p.len, phaseOffset, 0) + time * helixTimeSpeed;
-
-    const helixOffset = Math.sin(animatedHelixAngle) * (amplitude * taper);
-
-    // SYNCHRONIZED OPPOSITE MOTION
-    // time is in SECONDS
-    const swayFreq = 0.1;  // ~0.1 rad/s = ~60 second cycle (extremely gentle)
-    const timeAngle = time * swayFreq + p.len * 0.05;
-    // Fix: Use config.vine.swayAmount instead of hardcoded 4, allow 0
-    const swayAmt = (config.vine.swayAmount ?? 0) * taper;
-
-    // THE KEY: s=0 uses +sin, s=1 uses -sin (OPPOSITE direction)
-    const directionMultiplier = strandIdx === 0 ? 1 : -1;
-    const timeSwayX = Math.sin(timeAngle) * swayAmt * directionMultiplier;
-    const timeSwayY = Math.cos(timeAngle * 1.3) * (swayAmt * 0.4) * directionMultiplier;
-
-    const windX = windOffset * 0.3;
+    const p1 = this.vinePoints[index];
+    const p2 = this.vinePoints[nextIndex];
 
     return {
-      x: p.x + windX + timeSwayX + n.dx * helixOffset,
-      y: p.y + timeSwayY + n.dy * helixOffset,
-      t: t
+      x: p1.x + (p2.x - p1.x) * localT,
+      y: p1.y + (p2.y - p1.y) * localT,
+      thickness: p1.thickness + (p2.thickness - p1.thickness) * localT,
     };
   }
 
-  public getAttachmentPoints(): AttachmentPoint[] {
-    return this.simulator.attachmentPoints;
+  resize(width: number, height: number): void {
+    this.width_ = width;
+    this.height_ = height;
+    this.generateVinePath();
+    this.generateLeaves();
+    this.generateTendrils();
+    this.generateBranches();
+    this.draw(0);
   }
 
-  public getAvailableAttachmentPoint(externalOccupied: AttachmentPoint[] = [], preferredSlotType: number = 0): AttachmentPoint | null {
-    const baseSpacing = config.vine.minSpacing || 0.05;
-    const count = externalOccupied.length;
+  getAvailableBranch(): VineBranch | null {
+    const available = this.branches.filter((b) => !b.isOccupied());
+    if (available.length === 0) return null;
+    return available[Math.floor(Math.random() * available.length)];
+  }
 
-    const compressionThreshold = 100; // Allow more before spacing compacts
-    const spacingReduction = count > compressionThreshold ? (count - compressionThreshold) * 0.0001 : 0;
-    const currentMinSpacing = Math.max(0.005, baseSpacing - spacingReduction);
+  getAllBranches(): VineBranch[] {
+    return this.branches;
+  }
 
-    const candidates = this.simulator.attachmentPoints
-      .filter(p => !p.occupied)
-      .filter(p => {
-        const distFromCenter = Math.abs(p.t - 0.5);
-        // Deep Fix: Use growthTarget instead of current growth 
-        // This allows bulk-spawning into the expansion zone while the vine is still animating.
-        return distFromCenter <= this.growthTarget * 0.5;
-      });
+  getCrownPosition(): { x: number; y: number } {
+    return {
+      x: this.width_ * 0.5,
+      y: this.height_ * 0.06,
+    };
+  }
 
-    if (candidates.length === 0) return null;
+  update(time: number, windOffset: number = 0): void {
+    this.draw(time, windOffset);
 
-    // Filter by type-preference (Heart vs Flower slots)
-    // preferredSlotType: 0 for Flower, 1 for Heart
-    const typeMatchingCandidates = candidates.filter(p => p.slotIdx % 2 === preferredSlotType);
+    for (const branch of this.branches) {
+      branch.update(time, windOffset);
+    }
 
-    // Fallback to ANY candidate if preferred slot type is full
-    const activeCandidates = typeMatchingCandidates.length > 0 ? typeMatchingCandidates : candidates;
+    const crownPos = this.getCrownPosition();
+    this.crownFlower.x = crownPos.x;
+    this.crownFlower.y = crownPos.y;
+    this.crownFlower.update(time, windOffset);
+  }
 
-    const available = activeCandidates.filter(p => {
-      return !externalOccupied.some(eo =>
-        eo.strandIdx === p.strandIdx && Math.abs(p.t - eo.t) < currentMinSpacing
-      );
+  private draw(time: number, windOffset: number = 0): void {
+    this.graphics.clear();
+
+    if (this.vinePoints.length < 2) return;
+
+    // Very subtle sway
+    const globalSway = noise(time * config.vine.swaySpeed + this.timeOffset, 0) * config.vine.swayAmount;
+
+    // Draw main vine with thickness
+    this.drawMainVine(time, globalSway + windOffset * 0.3);
+
+    // Draw leaves
+    this.drawLeaves(time, globalSway + windOffset * 0.5);
+
+    // Draw tendrils
+    this.drawTendrils(time, globalSway + windOffset * 0.4);
+  }
+
+  private drawMainVine(_time: number, sway: number): void {
+    // Draw shadow/dark layer first
+    this.graphics.beginPath();
+    for (let i = 0; i < this.vinePoints.length; i++) {
+      const p = this.vinePoints[i];
+      const localSway = sway * (0.5 + Math.sin(i * 0.1) * 0.5);
+
+      if (i === 0) {
+        this.graphics.moveTo(p.x + localSway + 2, p.y + 2);
+      } else {
+        this.graphics.lineTo(p.x + localSway + 2, p.y + 2);
+      }
+    }
+    this.graphics.stroke({
+      width: config.vine.thickness + 4,
+      color: VineColors.dark,
+      cap: 'round',
+      join: 'round',
+      alpha: 0.4,
     });
 
-    if (available.length > 0) {
-      // Uniform Random: Pick any valid spot to ensure a natural "popcorn" spread
-      // instead of clumping at the crown or endpoints.
-      const randomIndex = Math.floor(Math.random() * available.length);
-      return available[randomIndex];
+    // Draw main vine
+    this.graphics.beginPath();
+    for (let i = 0; i < this.vinePoints.length; i++) {
+      const p = this.vinePoints[i];
+      const localSway = sway * (0.5 + Math.sin(i * 0.1) * 0.5);
+
+      if (i === 0) {
+        this.graphics.moveTo(p.x + localSway, p.y);
+      } else {
+        this.graphics.lineTo(p.x + localSway, p.y);
+      }
     }
-    return null;
+    this.graphics.stroke({
+      width: config.vine.thickness,
+      color: VineColors.main,
+      cap: 'round',
+      join: 'round',
+    });
+
+    // Draw highlight
+    this.graphics.beginPath();
+    for (let i = 0; i < this.vinePoints.length; i++) {
+      const p = this.vinePoints[i];
+      const localSway = sway * (0.5 + Math.sin(i * 0.1) * 0.5);
+
+      if (i === 0) {
+        this.graphics.moveTo(p.x + localSway - 2, p.y - 1);
+      } else {
+        this.graphics.lineTo(p.x + localSway - 2, p.y - 1);
+      }
+    }
+    this.graphics.stroke({
+      width: config.vine.thickness * 0.3,
+      color: VineColors.light,
+      cap: 'round',
+      join: 'round',
+      alpha: 0.5,
+    });
   }
 
-  public resetAttachmentPoints(): void {
-    this.simulator.attachmentPoints.forEach(p => p.occupied = false);
-    console.log('[Vine] All attachment points reset');
+  private drawLeaves(time: number, sway: number): void {
+    for (const leaf of this.leaves) {
+      const point = this.getPointAtT(leaf.t);
+      const localSway = sway * (0.5 + Math.sin(leaf.t * 10) * 0.5);
+
+      // Very subtle leaf animation
+      const leafSway = noise(time * 0.05 + leaf.offset, 0) * 0.08;
+
+      const x = point.x + localSway + leaf.side * (point.thickness * 0.5 + 2);
+      const y = point.y;
+
+      drawLeaf(
+        this.graphics,
+        x,
+        y,
+        leaf.size,
+        leaf.angle + leafSway,
+        VineColors.leaf
+      );
+    }
   }
 
-  public setGrowth(value: number): void {
-    this.growthTarget = Math.max(0, Math.min(config.vine.maxGrowth, value));
+  private drawTendrils(time: number, sway: number): void {
+    for (const tendril of this.tendrils) {
+      const point = this.getPointAtT(tendril.t);
+      const localSway = sway * (0.5 + Math.sin(tendril.t * 10) * 0.5);
+
+      const x = point.x + localSway + tendril.side * (point.thickness * 0.5);
+      const y = point.y;
+
+      // Subtle tendril movement
+      const tendrilSway = noise(time * 0.03 + tendril.t * 100, 0) * 0.1;
+
+      drawTendril(
+        this.graphics,
+        x,
+        y,
+        tendril.length,
+        tendril.angle + tendrilSway,
+        tendril.curls
+      );
+    }
   }
 
-  public setRenderer(renderer: any): void {
-    this.renderer.setRenderer(renderer);
-  }
-
-  public getGrowth(): number {
-    return this.growth;
-  }
-
-  public getCrownFlower(): any {
-    return this.crownFlower;
-  }
-
-  public setCrownColor(color: number): void {
-    this.crownFlower.setColor(color);
-  }
-
-  public getCrownColor(): number {
-    return this.crownFlower.getColor();
-  }
-
-  public resize(w: number, h: number): void {
-    this.simulator = new VineSimulator(w, h, this.isBackground);
-    this.refresh();
-  }
-
-  public destroy(): void {
+  destroy(): void {
+    for (const branch of this.branches) {
+      branch.destroy();
+    }
     this.crownFlower.destroy();
     this.graphics.destroy();
     super.destroy();

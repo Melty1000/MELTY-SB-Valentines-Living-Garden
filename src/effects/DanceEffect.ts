@@ -1,5 +1,5 @@
 import { EventBus, GardenEvents } from '../core/EventBus';
-import type { FlowerManager } from '../garden/flowers/FlowerManager';
+import type { FlowerManager } from '../garden/FlowerManager';
 import { config } from '../config';
 
 export class DanceEffect {
@@ -8,20 +8,17 @@ export class DanceEffect {
   private startTime: number = 0;
   private interval: number | null = null;
 
-  private tracker = EventBus.createTracker();
-
   constructor(flowerManager: FlowerManager) {
     this.flowerManager = flowerManager;
     this.setupEventListeners();
   }
 
   private setupEventListeners(): void {
-    const { on } = this.tracker;
-    on(GardenEvents.DANCE_START, () => {
+    EventBus.on(GardenEvents.DANCE_START, () => {
       this.start();
     });
 
-    on(GardenEvents.DANCE_END, () => {
+    EventBus.on(GardenEvents.DANCE_END, () => {
       this.stop();
     });
   }
@@ -68,7 +65,6 @@ export class DanceEffect {
   }
 
   destroy(): void {
-    this.tracker.unsubscribeAll();
     this.stop();
   }
 }

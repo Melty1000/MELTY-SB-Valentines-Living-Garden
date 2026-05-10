@@ -1,4 +1,4 @@
-import { Container, Graphics, Sprite, type Renderer } from 'pixi.js';
+import { Container, Graphics, Sprite } from 'pixi.js';
 import { randomRange } from '../utils/math';
 import { EffectColors } from '../utils/colors';
 import { drawHeart } from '../utils/procedural';
@@ -15,86 +15,47 @@ interface HeartParticle {
   scale: number;
   wobbleOffset: number;
   wobbleSpeed: number;
-  active: boolean;
 }
-
-const POOL_SIZE = 100;
 
 export class Hearts extends Container {
   private particles: HeartParticle[] = [];
-  private pool: HeartParticle[] = [];
-  private sharedTexture: Sprite['texture'] | null = null;
 
-  constructor(renderer: Renderer) {
+  constructor() {
     super();
-    this.initPool(renderer);
   }
 
-  private initPool(renderer: Renderer): void {
-    // 1. Create a "Master" heart graphics
-    const graphics = new Graphics();
-    drawHeart(graphics, 0, 0, 15, 0xFFFFFF); // White for tinting
-
-    // 2. Generate the shared texture
-    this.sharedTexture = renderer.generateTexture({
-      target: graphics,
-      resolution: 1,
-    });
-    graphics.destroy();
-
-    for (let i = 0; i < POOL_SIZE; i++) {
-      const sprite = new Sprite(this.sharedTexture);
-      sprite.anchor.set(0.5);
-      sprite.visible = false;
-      sprite.tint = Math.random() > 0.5 ? EffectColors.heartRed : EffectColors.heartPink;
-      this.addChild(sprite);
-
-      const particle: HeartParticle = {
-        sprite: sprite,
-        x: 0, y: 0, vx: 0, vy: 0,
-        life: 0, maxLife: 0, scale: 1,
-        wobbleOffset: 0, wobbleSpeed: 0,
-        active: false,
-      };
-      this.pool.push(particle);
-    }
-  }
-
-  spawn(x: number, y: number, count: number = config.particles.heartCount, palette?: number[]): void {
+  spawn(x: number, y: number, count: number = config.particles.heartCount): void {
     for (let i = 0; i < count; i++) {
-      this.activateParticle(x, y, palette);
+      this.createParticle(x, y);
     }
   }
 
-  private activateParticle(x: number, y: number, palette?: number[]): void {
-    let particle = this.pool.find(p => !p.active);
-    if (!particle) {
-      particle = this.particles[0];
-      if (!particle) return;
-    }
+  private createParticle(x: number, y: number): void {
+    const graphics = new Graphics();
+    const size = randomRange(10, 20);
+    const color = Math.random() > 0.5 ? EffectColors.heartRed : EffectColors.heartPink;
 
-    particle.x = x;
-    particle.y = y;
-    particle.vx = randomRange(-1, 1);
-    particle.vy = randomRange(-3, -1);
-    particle.life = config.particles.lifetime * 1.5;
-    particle.maxLife = config.particles.lifetime * 1.5;
-    particle.scale = randomRange(0.5, 1);
-    particle.wobbleOffset = randomRange(0, Math.PI * 2);
-    particle.wobbleSpeed = randomRange(2, 4);
-    particle.active = true;
-    particle.sprite.visible = true;
+    drawHeart(graphics, 0, 0, size, color);
 
-    // Apply color from palette if provided, otherwise reset to default
-    if (palette && palette.length > 0) {
-      particle.sprite.tint = palette[Math.floor(Math.random() * palette.length)];
-    } else {
-      particle.sprite.tint = Math.random() > 0.5 ? EffectColors.heartRed : EffectColors.heartPink;
-    }
+    const sprite = graphics as unknown as Sprite;
+    sprite.x = x;
+    sprite.y = y;
 
-    if (!this.particles.includes(particle)) {
-      this.particles.push(particle);
-    }
+    const particle: HeartParticle = {
+      sprite,
+      x,
+      y,
+      vx: randomRange(-1, 1),
+      vy: randomRange(-3, -1),
+      life: config.particles.lifetime * 1.5,
+      maxLife: config.particles.lifetime * 1.5,
+      scale: randomRange(0.5, 1),
+      wobbleOffset: randomRange(0, Math.PI * 2),
+      wobbleSpeed: randomRange(2, 4),
+    };
+
+    this.particles.push(particle);
+    this.addChild(graphics);
   }
 
   update(deltaTime: number): void {
@@ -105,8 +66,7 @@ export class Hearts extends Container {
 
       p.life -= deltaTime;
       if (p.life <= 0) {
-        p.active = false;
-        p.sprite.visible = false;
+        this.removeChild(p.sprite);
         this.particles.splice(i, 1);
         continue;
       }
@@ -127,8 +87,7 @@ export class Hearts extends Container {
 
   clear(): void {
     for (const p of this.particles) {
-      p.active = false;
-      p.sprite.visible = false;
+      this.removeChild(p.sprite);
     }
     this.particles = [];
   }

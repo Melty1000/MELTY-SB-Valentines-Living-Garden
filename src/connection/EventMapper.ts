@@ -6,7 +6,6 @@ import type {
   GiftBombEventData,
   FollowEventData,
   CheerEventData,
-  RaidEventData,
   CommandEventData,
 } from './types';
 
@@ -34,9 +33,6 @@ export class EventMapper {
       case 'cheer':
         this.handleCheer(event.data as CheerEventData);
         break;
-      case 'raid':
-        this.handleRaid(event.data as RaidEventData);
-        break;
       case 'command':
         this.handleCommand(event.data as CommandEventData);
         break;
@@ -53,10 +49,6 @@ export class EventMapper {
   }
 
   private handleChatter(data: ChatterEventData): void {
-    if (!data || !data.userId) {
-      console.warn('[EventMapper] Ignoring malformed Chatter event. Missing userId. Keys:', data ? Object.keys(data) : 'null', data);
-      return;
-    }
     console.log(`[EventMapper] Chatter: ${data.displayName} (${data.messageCount} messages)`);
     EventBus.emit(GardenEvents.CHATTER, data);
   }
@@ -79,11 +71,6 @@ export class EventMapper {
   private handleCheer(data: CheerEventData): void {
     console.log(`[EventMapper] Cheer: ${data.displayName} cheered ${data.bits} bits`);
     EventBus.emit(GardenEvents.CHEER, data);
-  }
-
-  private handleRaid(data: RaidEventData): void {
-    console.log(`[EventMapper] Raid: ${data.displayName} with ${data.viewers} viewers`);
-    EventBus.emit(GardenEvents.RAID, data);
   }
 
   private handleCommand(data: CommandEventData): void {

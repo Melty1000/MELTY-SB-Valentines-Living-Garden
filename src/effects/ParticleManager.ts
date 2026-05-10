@@ -1,68 +1,59 @@
-import { Container, type Renderer } from 'pixi.js';
+import { Container } from 'pixi.js';
 import { Sparkles } from './Sparkles';
 import { Hearts } from './Hearts';
-import { Petals } from './Petals';
 import { EventBus, GardenEvents } from '../core/EventBus';
 import type { CheerEventData } from '../connection/types';
-import type { Flower } from '../garden/flowers/Flower';
-import { FlowerStage } from '../garden/flowers/Flower';
+import type { Flower } from '../garden/Flower';
+import { FlowerStage } from '../garden/Flower';
 
 export class ParticleManager extends Container {
   private sparkles: Sparkles;
   private hearts: Hearts;
-  private petals: Petals;
 
-  private tracker = EventBus.createTracker();
-
-  constructor(renderer: Renderer) {
+  constructor() {
     super();
 
-    this.sparkles = new Sparkles(renderer);
-    this.hearts = new Hearts(renderer);
-    this.petals = new Petals(renderer);
+    this.sparkles = new Sparkles();
+    this.hearts = new Hearts();
 
     this.addChild(this.sparkles);
     this.addChild(this.hearts);
-    this.addChild(this.petals);
 
     this.setupEventListeners();
   }
 
   private setupEventListeners(): void {
-    const { on } = this.tracker;
-
-    on(GardenEvents.FLOWER_GROW, (data: { flower: Flower; stage: FlowerStage, interaction?: boolean }) => {
-      const palette = [data.flower.getColor()];
-
-      if (data.interaction && data.stage === FlowerStage.Radiant) {
-        this.emitPetals(data.flower.x, data.flower.y, 5, palette);
-        return;
-      }
-
-      if (data.stage === FlowerStage.Radiant) {
-        this.emitPetals(data.flower.x, data.flower.y, 50, palette);
-      } else if (data.stage === FlowerStage.FullBloom || data.stage === FlowerStage.MegaBloom) {
-        this.emitPetals(data.flower.x, data.flower.y, 30, palette);
+    EventBus.on(GardenEvents.FLOWER_GROW, (data: { flower: Flower; stage: FlowerStage }) => {
+      if (data.stage === FlowerStage.FullBloom) {
+        this.emitSparkles(data.flower.x, data.flower.y, 30);
       } else if (data.stage === FlowerStage.Blooming) {
-        this.emitPetals(data.flower.x, data.flower.y, 15, palette);
+        this.emitSparkles(data.flower.x, data.flower.y, 15);
       }
     });
 
-    on(GardenEvents.PETAL_SPAWN, (data: { x: number; y: number, count?: number, palette?: number[] }) => {
-      this.emitPetals(data.x, data.y, data.count || 10, data.palette);
+    EventBus.on(GardenEvents.HEART_SPAWN, (data: { heart: { x: number; y: number } }) => {
+      this.emitHearts(data.heart.x, data.heart.y, 15);
     });
 
-    on(GardenEvents.PETAL_RAIN, (data: { count?: number, palette?: number[] }) => {
-      this.emitPetalRain(data.count || 20, data.palette);
-    });
-
-    on<CheerEventData>(GardenEvents.CHEER, (data) => {
+    EventBus.on<CheerEventData>(GardenEvents.CHEER, (data) => {
       const intensity = Math.min(data.bits / 100, 5);
-      this.emitPetals(
+      this.emitSparkles(
         Math.random() * window.innerWidth,
         Math.random() * window.innerHeight * 0.5,
         Math.floor(20 * intensity)
       );
+    });
+
+    EventBus.on(GardenEvents.DANCE_START, () => {
+      for (let i = 0; i < 5; i++) {
+        setTimeout(() => {
+          this.emitHearts(
+            Math.random() * window.innerWidth,
+            window.innerHeight * 0.8,
+            10
+          );
+        }, i * 200);
+      }
     });
   }
 
@@ -70,36 +61,23 @@ export class ParticleManager extends Container {
     this.sparkles.spawn(x, y, count);
   }
 
-  emitHearts(x: number, y: number, count?: number, palette?: number[]): void {
-    this.hearts.spawn(x, y, count, palette);
-  }
-
-  emitPetals(x: number, y: number, count?: number, palette?: number[]): void {
-    this.petals.spawn(x, y, count, palette);
-  }
-
-  emitPetalRain(count: number, palette?: number[]): void {
-    // Mode 'rain' handles random positioning and falling logic
-    this.petals.spawn(0, 0, count, palette, 'rain');
+  emitHearts(x: number, y: number, count?: number): void {
+    this.hearts.spawn(x, y, count);
   }
 
   update(deltaTime: number): void {
     this.sparkles.update(deltaTime);
     this.hearts.update(deltaTime);
-    this.petals.update(deltaTime);
   }
 
   clear(): void {
     this.sparkles.clear();
     this.hearts.clear();
-    this.petals.clear();
   }
 
   override destroy(): void {
-    this.tracker.unsubscribeAll();
     this.sparkles.destroy();
     this.hearts.destroy();
-    this.petals.destroy();
     super.destroy();
   }
 }

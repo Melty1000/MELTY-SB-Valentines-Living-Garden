@@ -22,8 +22,6 @@ export class Application {
       autoDensity: true,
     });
 
-
-
     container.appendChild(this.app.canvas);
 
     this.width = this.app.screen.width;

@@ -40,16 +40,6 @@ class PerlinNoise {
   }
 
   noise2D(x: number, y: number): number {
-    // NaN safeguard
-    if (isNaN(x)) x = 0;
-    if (isNaN(y)) y = 0;
-
-    // Wrap to prevent precision issues as time grows very large
-    // We stay within 256 for the table lookup, but we wrap the float coordinate to [0, 100000]
-    // for safe mantissa precision.
-    x = x % 100000;
-    y = y % 100000;
-
     const X = Math.floor(x) & 255;
     const Y = Math.floor(y) & 255;
 
@@ -125,10 +115,6 @@ export function easeInOut(t: number): number {
   return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 }
 
-export function easeOutCubic(t: number): number {
-  return 1 - Math.pow(1 - t, 3);
-}
-
 export function easeOutElastic(t: number): number {
   const c4 = (2 * Math.PI) / 3;
   return t === 0
@@ -151,15 +137,6 @@ export function easeOutBounce(t: number): number {
   } else {
     return n1 * (t -= 2.625 / d1) * t + 0.984375;
   }
-}
-
-export function stringToSeed(str: string): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = (hash << 5) - hash + str.charCodeAt(i);
-    hash |= 0; // Convert to 32bit integer
-  }
-  return Math.abs(hash);
 }
 
 export function randomRange(min: number, max: number): number {

@@ -10,8 +10,6 @@ export class CommandHandler {
   private particleManager: ParticleManager;
   private windSway: WindSway;
 
-  private tracker = EventBus.createTracker();
-
   constructor(garden: Garden, particleManager: ParticleManager, windSway: WindSway) {
     this.garden = garden;
     this.particleManager = particleManager;
@@ -22,8 +20,7 @@ export class CommandHandler {
   }
 
   private setupEventListeners(): void {
-    const { on } = this.tracker;
-    on<CommandEventData>(GardenEvents.COMMAND, (data) => {
+    EventBus.on<CommandEventData>(GardenEvents.COMMAND, (data) => {
       this.handleCommand(data);
     });
   }
@@ -100,7 +97,7 @@ export class CommandHandler {
       execute: (context) => {
         const intensity = context.args[0] ? parseFloat(context.args[0]) : 1;
         const clampedIntensity = Math.max(0.5, Math.min(2, intensity));
-        this.windSway.forceGust(performance.now() * 0.001, clampedIntensity);
+        this.windSway.forceGust(clampedIntensity);
       },
     };
 
@@ -116,47 +113,12 @@ export class CommandHandler {
       },
     };
 
-    const pulseCommand: RegisteredCommand = {
-      name: 'pulse',
-      description: 'Pulses the flower',
-      execute: (context) => {
-        const flower = this.garden.getFlowerManager().getFlower(context.userId);
-        if (flower) flower.startWobble(2.0); // Placeholder for pulse
-      },
-    };
-
-    const bloomCommand: RegisteredCommand = {
-      name: 'bloom',
-      description: 'Forces flower to bloom',
-      execute: (context) => {
-        const flower = this.garden.getFlowerManager().getFlower(context.userId);
-        // Direct import of Enum might be needed, or magic number
-        // reusing local import if available, otherwise casting
-        if (flower) flower.setImmediateStage(4); // Radiant
-      },
-    };
-
-    const growCommand: RegisteredCommand = {
-      name: 'grow',
-      description: 'Grows the flower',
-      execute: (context) => {
-        const flower = this.garden.getFlowerManager().getFlower(context.userId);
-        if (flower) {
-          const next = Math.min(4, flower.stage + 1);
-          flower.setImmediateStage(next);
-        }
-      },
-    };
-
     CommandRegistry.register(wiggleCommand);
     CommandRegistry.register(wiggleAllCommand);
     CommandRegistry.register(sparkleCommand);
     CommandRegistry.register(danceCommand);
     CommandRegistry.register(gustCommand);
     CommandRegistry.register(heartCommand);
-    CommandRegistry.register(pulseCommand);
-    CommandRegistry.register(bloomCommand);
-    CommandRegistry.register(growCommand);
   }
 
   registerCommand(command: RegisteredCommand): void {
@@ -164,7 +126,6 @@ export class CommandHandler {
   }
 
   destroy(): void {
-    this.tracker.unsubscribeAll();
     CommandRegistry.clear();
   }
 }

@@ -1,9 +1,9 @@
 // Natural, muted color palette
 export const FlowerColors = {
-  rose: 0xe31b23,
-  roseDark: 0x7a0000,
-  roseLight: 0xff4d6d,
-  blush: 0xff85a1,
+  rose: 0xb85c6e,
+  roseDark: 0x8b4558,
+  roseLight: 0xd4909e,
+  blush: 0xc9a0a0,
   lavender: 0x8a7a94,
   cream: 0xf0e0d0,
   peach: 0xd4b090,
@@ -13,9 +13,9 @@ export const FlowerColors = {
 } as const;
 
 export const VineColors = {
-  main: 0x5ba05b,        // Vibrant spring/garden green
-  dark: 0x3d6b3d,        // Softer outline green (was 0x1a2e1a - too dark)
-  light: 0x8ecb8e,       // Bright core highlight green
+  main: 0x3a5438,        // Muted forest green
+  dark: 0x283828,        // Darker shadow
+  light: 0x4a6848,       // Lighter areas
   stem: 0x445840,        // Stem color
   leaf: 0x3e5a3a,        // Main leaf
   leafDark: 0x2e4430,    // Leaf shadow
@@ -85,24 +85,10 @@ export function darken(color: number, amount: number): number {
 }
 
 export function userIdToColor(userId: string): number {
-  if (!userId) return FlowerColors.rose; // Fallback to rose
   let hash = 0;
   for (let i = 0; i < userId.length; i++) {
     hash = userId.charCodeAt(i) + ((hash << 5) - hash);
   }
   const index = Math.abs(hash) % flowerColorNames.length;
   return FlowerColors[flowerColorNames[index]];
-}
-
-/**
- * Parses a Twitch color string (e.g., "#FF0000" or "") into a number.
- * Returns null if the color is invalid or missing.
- */
-export function parseTwitchColor(colorStr?: string): number | null {
-  if (!colorStr) return null;
-  // Handle prefixed Twitch colors (e.g. #FF0000 vs FF0000)
-  const str = colorStr.startsWith('#') ? colorStr.substring(1) : colorStr;
-  if (str.length !== 6) return null;
-  const val = parseInt(str, 16);
-  return isNaN(val) ? null : val;
 }
